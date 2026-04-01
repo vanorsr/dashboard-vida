@@ -23,9 +23,11 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 @keyframes slideIn{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes spin{to{transform:rotate(360deg)}}
 .fa{animation:fadeUp .3s ease both}
 .shake{animation:shake .4s ease}
 .si{animation:slideIn .3s ease both}
+.spin{animation:spin 1s linear infinite;display:inline-block}
 button{cursor:pointer;border:none;outline:none;transition:opacity .15s}
 button:active{opacity:.75}
 </style>
@@ -33,12 +35,66 @@ button:active{opacity:.75}
 <body>
 <div id="root"></div>
 <script type="text/babel">
-const {useState,useEffect,useMemo}=React;
+const {useState,useEffect,useMemo,useCallback}=React;
 
-// Keys
+// ── Supabase ──────────────────────────────────────────────────────────────
+const SUPA_URL="https://kyblsjyzlvawxinzaakf.supabase.co";
+const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt5Ymxzanl6bHZhd3hpbnphYWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMjQ4MTksImV4cCI6MjA5MDYwMDgxOX0.h12Sjfqqix3orJjj-p-_ywl9uefHIhEt-0GmKRsncpg";
+
+const supaH={
+  "apikey":SUPA_KEY,
+  "Authorization":`Bearer ${SUPA_KEY}`,
+  "Content-Type":"application/json",
+  "Prefer":"resolution=merge-duplicates,return=minimal",
+};
+const supaGet={"apikey":SUPA_KEY,"Authorization":`Bearer ${SUPA_KEY}`};
+
+// Mapeamento app ↔ banco
+function entryToRow(date,e){
+  return{data:date,foco:e.foco||null,sono:e.sono||null,humor:e.humor||null,
+    emocao:e.emocao||null,alcool:e.alcool||null,movimento:e.movimento||null,financas:e.financas||null,
+    nota_foco:e.n_foco||null,nota_sono:e.n_sono||null,nota_humor:e.n_humor||null,
+    nota_emocao:e.n_emocao||null,nota_alcool:e.n_alcool||null,
+    nota_movimento:e.n_movimento||null,nota_financas:e.n_financas||null};
+}
+function rowToEntry(r){
+  return{foco:r.foco,sono:r.sono,humor:r.humor,emocao:r.emocao,
+    alcool:r.alcool,movimento:r.movimento,financas:r.financas,
+    n_foco:r.nota_foco,n_sono:r.nota_sono,n_humor:r.nota_humor,
+    n_emocao:r.nota_emocao,n_alcool:r.nota_alcool,
+    n_movimento:r.nota_movimento,n_financas:r.nota_financas};
+}
+
+// API Supabase
+async function sbFetchEntries(){
+  const r=await fetch(`${SUPA_URL}/rest/v1/dvida_registros?select=*`,{headers:supaGet});
+  if(!r.ok)throw new Error("fetch entries");
+  const rows=await r.json();
+  const out={};rows.forEach(row=>{out[row.data]=rowToEntry(row)});
+  return out;
+}
+async function sbUpsertEntry(date,entry){
+  const r=await fetch(`${SUPA_URL}/rest/v1/dvida_registros`,{method:"POST",headers:supaH,body:JSON.stringify(entryToRow(date,entry))});
+  if(!r.ok)throw new Error("upsert entry");
+}
+async function sbFetchMeds(){
+  const r=await fetch(`${SUPA_URL}/rest/v1/dvida_medicamentos?select=*`,{headers:supaGet});
+  if(!r.ok)throw new Error("fetch meds");
+  const rows=await r.json();
+  return rows.map(r=>r.dados);
+}
+async function sbUpsertMed(med){
+  const r=await fetch(`${SUPA_URL}/rest/v1/dvida_medicamentos`,{method:"POST",headers:supaH,body:JSON.stringify({id:med.id,dados:med})});
+  if(!r.ok)throw new Error("upsert med");
+}
+async function sbDeleteMed(id){
+  await fetch(`${SUPA_URL}/rest/v1/dvida_medicamentos?id=eq.${id}`,{method:"DELETE",headers:supaH});
+}
+
+// ── Storage keys
 const PIN_KEY="dvida_pin",DATA_KEY="dvida_entries",MED_KEY="dvida_meds",SES_KEY="dvida_session";
 
-// ElevaMind Dark
+// ── ElevaMind Dark
 const BG="#0F172A",SURFACE="#1E293B",SURFACE2="#263348";
 const ACCENT="#60A5FA",SUCCESS="#10B981",DANGER="#F87171",WARNING="#FBBF24";
 const TEXT="#F1F5F9",TEXT2="#94A3B8",BORDER="rgba(96,165,250,0.15)";
@@ -61,11 +117,9 @@ const DIMS=[
    a1:"Compra por impulso ou conta esquecida",a5:"Nenhum gasto impulsivo"},
 ];
 
-// Utils
 const today=()=>new Date().toISOString().split("T")[0];
 const fmtS=d=>{const[,m,dd]=d.split("-");return`${dd}/${m}`};
 const fmtF=d=>new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{weekday:"short",day:"numeric",month:"short"});
-const fmtMonth=d=>new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{month:"long",year:"numeric"});
 const uid=()=>Math.random().toString(36).slice(2,10);
 const brl=v=>Number(v).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
 const avg=e=>e?+(DIMS.reduce((s,d)=>s+(e[d.id]||0),0)/DIMS.length).toFixed(1):null;
@@ -73,18 +127,13 @@ const loadJ=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch{retu
 const persist=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 function doseAt(med,date){return[...med.doses].sort((a,b)=>a.data>b.data?1:-1).filter(d=>d.data<=date).slice(-1)[0]||null}
 function medsAt(meds,date){return meds.filter(m=>m.dataInicio<=date&&(!m.dataFim||m.dataFim>=date))}
-function weekKey(date){
-  const d=new Date(date+"T12:00:00");
-  const jan1=new Date(d.getFullYear(),0,1);
-  const wk=Math.ceil(((d-jan1)/86400000+jan1.getDay()+1)/7);
-  return`${d.getFullYear()}-W${String(wk).padStart(2,"0")}`;
-}
+function weekKey(date){const d=new Date(date+"T12:00:00");const j=new Date(d.getFullYear(),0,1);const w=Math.ceil(((d-j)/86400000+j.getDay()+1)/7);return`${d.getFullYear()}-W${String(w).padStart(2,"0")}`}
+
 function exportCSV(entries){
   const cols=DIMS.map(d=>d.id);
   const hdr=["data",...cols,...cols.map(c=>`nota_${c}`),"media_geral"];
   const rows=Object.keys(entries).sort().map(date=>{
-    const e=entries[date];
-    const sc=cols.map(c=>e[c]||"");
+    const e=entries[date];const sc=cols.map(c=>e[c]||"");
     const nt=cols.map(c=>`"${(e[`n_${c}`]||"").replace(/"/g,'""')}"`);
     const av=sc.filter(Boolean).length?(sc.filter(Boolean).reduce((a,b)=>a+Number(b),0)/sc.filter(Boolean).length).toFixed(2):"";
     return[date,...sc,...nt,av].join(",");
@@ -94,17 +143,34 @@ function exportCSV(entries){
   URL.revokeObjectURL(url);
 }
 
-// Shared
+// ── Shared styles
 const card={background:SURFACE2,border:`1px solid ${BORDER}`,borderRadius:"12px",padding:"16px",boxShadow:"0 4px 12px rgba(0,0,0,0.15)"};
 const inp={width:"100%",background:SURFACE,border:`1px solid rgba(96,165,250,0.25)`,borderRadius:"8px",padding:"10px 14px",color:TEXT,fontSize:"14px",outline:"none"};
 
+// ── Status de sync ────────────────────────────────────────────────────────
+function SyncBadge({status}){
+  const cfg={
+    syncing:{icon:"↻",color:ACCENT,spin:true,label:"Sincronizando..."},
+    synced: {icon:"✓",color:SUCCESS,spin:false,label:"Sincronizado"},
+    error:  {icon:"⚠",color:WARNING,spin:false,label:"Offline — dados salvos localmente"},
+    idle:   {icon:"",color:TEXT2,spin:false,label:""},
+  }[status]||{};
+  if(status==="idle")return null;
+  return<div style={{display:"flex",alignItems:"center",gap:"6px",padding:"5px 10px",
+    borderRadius:"20px",background:`${cfg.color}15`,border:`1px solid ${cfg.color}30`,
+    fontSize:"11px",color:cfg.color,fontWeight:"500"}}>
+    <span className={cfg.spin?"spin":""}>{cfg.icon}</span>
+    {cfg.label}
+  </div>;
+}
+
+// ── Componentes base ──────────────────────────────────────────────────────
 function MiniBar({value}){
   return<div style={{display:"flex",gap:"2px"}}>
     {[1,2,3,4,5].map(n=><div key={n} style={{width:"8px",height:"8px",borderRadius:"2px",
       background:n<=value?C[value]:"rgba(255,255,255,0.1)"}}/>)}
   </div>;
 }
-
 function TrendLine({data,color,markers=[],dates=[]}){
   if(data.length<2)return null;
   const w=260,h=50,p=4;
@@ -159,7 +225,7 @@ function PinScreen({onUnlock}){
   </div>;
 }
 
-// ── Modal ─────────────────────────────────────────────────────────────────
+// ── Modal + Field ─────────────────────────────────────────────────────────
 function Modal({title,onClose,children}){
   return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.8)",zIndex:100,
     display:"flex",alignItems:"flex-end",justifyContent:"center"}}
@@ -176,7 +242,6 @@ function Modal({title,onClose,children}){
     </div>
   </div>;
 }
-
 function Field({label,hint,children}){
   return<div style={{marginBottom:"14px"}}>
     <div style={{fontSize:"11px",color:TEXT2,textTransform:"uppercase",letterSpacing:".08em",
@@ -186,8 +251,7 @@ function Field({label,hint,children}){
   </div>;
 }
 
-// ── History sub-views ─────────────────────────────────────────────────────
-
+// ── History Items ─────────────────────────────────────────────────────────
 function HistoryItem({date,entry,meds,allDoseMarkers}){
   const[open,setOpen]=useState(false);
   const av=avg(entry);
@@ -229,53 +293,29 @@ function HistoryItem({date,entry,meds,allDoseMarkers}){
   </div>;
 }
 
-// Heatmap mensal
+// ── Heatmap ───────────────────────────────────────────────────────────────
 function HeatmapView({entries}){
   const allDates=Object.keys(entries).sort();
-  const firstMonth=allDates.length?allDates[0].slice(0,7):today().slice(0,7);
   const[ym,setYm]=useState(today().slice(0,7));
-
-  const months=useMemo(()=>{
-    const set=new Set(allDates.map(d=>d.slice(0,7)));
-    set.add(today().slice(0,7));
-    return[...set].sort();
-  },[entries]);
-
+  const months=useMemo(()=>{const s=new Set(allDates.map(d=>d.slice(0,7)));s.add(today().slice(0,7));return[...s].sort()},[entries]);
   const[year,month]=ym.split("-").map(Number);
   const firstDay=new Date(year,month-1,1).getDay();
   const daysInMonth=new Date(year,month,0).getDate();
-  const cells=[];
-  for(let i=0;i<firstDay;i++)cells.push(null);
-  for(let d=1;d<=daysInMonth;d++)cells.push(String(d).padStart(2,"0"));
-
+  const cells=[];for(let i=0;i<firstDay;i++)cells.push(null);for(let d=1;d<=daysInMonth;d++)cells.push(String(d).padStart(2,"0"));
   const prev=()=>{const i=months.indexOf(ym);if(i>0)setYm(months[i-1])};
   const next=()=>{const i=months.indexOf(ym);if(i<months.length-1)setYm(months[i+1])};
-  const canPrev=months.indexOf(ym)>0;
-  const canNext=months.indexOf(ym)<months.length-1;
-
   const dayNames=["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"];
-
   return<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-    {/* Navegação de mês */}
     <div style={{...card,padding:"12px 16px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
-        <button onClick={prev} disabled={!canPrev} style={{background:canPrev?SURFACE:"transparent",
-          border:`1px solid ${canPrev?BORDER:"transparent"}`,borderRadius:"8px",padding:"6px 12px",
-          color:canPrev?TEXT:TEXT2,fontSize:"18px",fontFamily:"inherit"}}>‹</button>
+        <button onClick={prev} disabled={months.indexOf(ym)===0} style={{background:SURFACE,border:`1px solid ${BORDER}`,borderRadius:"8px",padding:"6px 14px",color:TEXT,fontSize:"18px",fontFamily:"inherit"}}>‹</button>
         <div style={{fontSize:"14px",fontWeight:"600",color:TEXT,textTransform:"capitalize"}}>
-          {new Date(year,month-1,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}
-        </div>
-        <button onClick={next} disabled={!canNext} style={{background:canNext?SURFACE:"transparent",
-          border:`1px solid ${canNext?BORDER:"transparent"}`,borderRadius:"8px",padding:"6px 12px",
-          color:canNext?TEXT:TEXT2,fontSize:"18px",fontFamily:"inherit"}}>›</button>
+          {new Date(year,month-1,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</div>
+        <button onClick={next} disabled={months.indexOf(ym)===months.length-1} style={{background:SURFACE,border:`1px solid ${BORDER}`,borderRadius:"8px",padding:"6px 14px",color:TEXT,fontSize:"18px",fontFamily:"inherit"}}>›</button>
       </div>
-
-      {/* Dias da semana */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"3px",marginBottom:"4px"}}>
         {dayNames.map(d=><div key={d} style={{textAlign:"center",fontSize:"10px",color:TEXT2,fontWeight:"600",padding:"2px 0"}}>{d}</div>)}
       </div>
-
-      {/* Células */}
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"3px"}}>
         {cells.map((dd,i)=>{
           if(!dd)return<div key={i}/>;
@@ -284,27 +324,22 @@ function HeatmapView({entries}){
           const av=e?avg(e):null;
           const isToday=dateStr===today();
           const isFuture=dateStr>today();
-          return<div key={i} style={{
-            aspectRatio:"1",borderRadius:"6px",display:"flex",alignItems:"center",justifyContent:"center",
-            flexDirection:"column",cursor:e?"default":"default",
-            background:e?`${C[Math.round(av)]}30`:isFuture?"transparent":SURFACE,
+          return<div key={i} style={{aspectRatio:"1",borderRadius:"6px",display:"flex",alignItems:"center",
+            justifyContent:"center",flexDirection:"column",
+            background:e?`${C[Math.round(av)]}28`:isFuture?"transparent":SURFACE,
             border:isToday?`2px solid ${ACCENT}`:e?`1px solid ${C[Math.round(av)]}50`:`1px solid ${BORDER}`,
-          }}>
-            <div style={{fontSize:"10px",fontWeight:"600",color:e?C[Math.round(av)]:isFuture?TEXT2:TEXT2,opacity:isFuture?.3:1}}>
-              {parseInt(dd)}
-            </div>
-            {e&&<div style={{fontSize:"9px",fontWeight:"700",color:C[Math.round(av)]}}>{av}</div>}
+            opacity:isFuture?.2:1}}>
+            <div style={{fontSize:"10px",fontWeight:"600",color:e?C[Math.round(av)]:TEXT2}}>{parseInt(dd)}</div>
+            {e&&<div style={{fontSize:"9px",fontWeight:"800",color:C[Math.round(av)]}}>{av}</div>}
           </div>;
         })}
       </div>
     </div>
-
-    {/* Legenda */}
     <div style={{...card,padding:"12px 16px"}}>
       <div style={{fontSize:"11px",color:TEXT2,fontWeight:"600",marginBottom:"8px",textTransform:"uppercase",letterSpacing:".08em"}}>Legenda</div>
       <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
         {[1,2,3,4,5].map(n=><div key={n} style={{display:"flex",alignItems:"center",gap:"5px"}}>
-          <div style={{width:"12px",height:"12px",borderRadius:"3px",background:`${C[n]}30`,border:`1px solid ${C[n]}50`}}/>
+          <div style={{width:"12px",height:"12px",borderRadius:"3px",background:`${C[n]}28`,border:`1px solid ${C[n]}50`}}/>
           <span style={{fontSize:"11px",color:TEXT2}}>{n}</span>
         </div>)}
         <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
@@ -316,60 +351,44 @@ function HeatmapView({entries}){
   </div>;
 }
 
-// Resumo semanal
+// ── Semanal ───────────────────────────────────────────────────────────────
 function WeeklyView({entries}){
   const sorted=Object.keys(entries).sort();
-  if(sorted.length<2)return<div style={{textAlign:"center",padding:"56px 0",color:TEXT2,fontSize:"14px",lineHeight:1.8}}>
-    Registre pelo menos 2 dias<br/>para ver o resumo semanal.</div>;
-
+  if(sorted.length<2)return<div style={{textAlign:"center",padding:"56px 0",color:TEXT2,fontSize:"14px",lineHeight:1.8}}>Registre pelo menos 2 dias<br/>para ver o resumo semanal.</div>;
   const byWeek={};
-  sorted.forEach(date=>{
-    const wk=weekKey(date);
-    if(!byWeek[wk])byWeek[wk]={dates:[],entries:[]};
-    byWeek[wk].dates.push(date);
-    byWeek[wk].entries.push(entries[date]);
-  });
-
+  sorted.forEach(date=>{const wk=weekKey(date);if(!byWeek[wk]){byWeek[wk]={dates:[],entries:[]}}byWeek[wk].dates.push(date);byWeek[wk].entries.push(entries[date])});
   const weeks=Object.keys(byWeek).sort().reverse();
-
   return<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
     {weeks.map((wk,wi)=>{
       const{dates,entries:es}=byWeek[wk];
-      const firstDate=dates[0],lastDate=dates[dates.length-1];
-      const weekAvg=+(es.reduce((s,e)=>s+avg(e),0)/es.length).toFixed(1);
+      const wkAvg=+(es.reduce((s,e)=>s+avg(e),0)/es.length).toFixed(1);
       const prevWk=weeks[wi+1];
       const prevAvg=prevWk?(byWeek[prevWk].entries.reduce((s,e)=>s+avg(e),0)/byWeek[prevWk].entries.length):null;
-      const delta=prevAvg?(weekAvg-prevAvg).toFixed(1):null;
-
+      const delta=prevAvg?(wkAvg-prevAvg).toFixed(1):null;
       return<div key={wk} className="fa" style={card}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
           <div>
-            <div style={{fontSize:"13px",fontWeight:"700",color:TEXT}}>
-              {fmtS(firstDate)} — {fmtS(lastDate)}
-            </div>
-            <div style={{fontSize:"11px",color:TEXT2,marginTop:"2px"}}>{es.length} {es.length===1?"dia":"dias"} registrado{es.length>1?"s":""}</div>
+            <div style={{fontSize:"13px",fontWeight:"700",color:TEXT}}>{fmtS(dates[0])} — {fmtS(dates[dates.length-1])}</div>
+            <div style={{fontSize:"11px",color:TEXT2,marginTop:"2px"}}>{es.length} dia{es.length>1?"s":""} registrado{es.length>1?"s":""}</div>
           </div>
           <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
             {delta!==null&&<span style={{fontSize:"11px",fontWeight:"600",
               color:parseFloat(delta)>0?SUCCESS:parseFloat(delta)<0?DANGER:TEXT2}}>
-              {parseFloat(delta)>0?"▲":parseFloat(delta)<0?"▼":"="} {Math.abs(delta)}
-            </span>}
-            <span style={{fontSize:"22px",fontWeight:"800",color:C[Math.round(weekAvg)]}}>{weekAvg}</span>
+              {parseFloat(delta)>0?"▲":parseFloat(delta)<0?"▼":"="} {Math.abs(delta)}</span>}
+            <span style={{fontSize:"22px",fontWeight:"800",color:C[Math.round(wkAvg)]}}>{wkAvg}</span>
           </div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
           {DIMS.map(dim=>{
             const vals=es.map(e=>e[dim.id]).filter(Boolean);
             if(!vals.length)return null;
-            const dimAvg=+(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);
-            const pct=(dimAvg/5)*100;
+            const dAvg=+(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);
             return<div key={dim.id} style={{display:"flex",alignItems:"center",gap:"8px"}}>
               <span style={{fontSize:"13px",minWidth:"20px"}}>{dim.icon}</span>
               <div style={{flex:1,height:"6px",borderRadius:"3px",background:SURFACE,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${pct}%`,borderRadius:"3px",
-                  background:C[Math.round(dimAvg)],transition:"width .4s"}}/>
+                <div style={{height:"100%",width:`${(dAvg/5)*100}%`,borderRadius:"3px",background:C[Math.round(dAvg)]}}/>
               </div>
-              <span style={{fontSize:"12px",fontWeight:"700",color:C[Math.round(dimAvg)],minWidth:"28px",textAlign:"right"}}>{dimAvg}</span>
+              <span style={{fontSize:"12px",fontWeight:"700",color:C[Math.round(dAvg)],minWidth:"28px",textAlign:"right"}}>{dAvg}</span>
             </div>;
           })}
         </div>
@@ -378,31 +397,25 @@ function WeeklyView({entries}){
   </div>;
 }
 
-// Tabela comparativa
+// ── Tabela ────────────────────────────────────────────────────────────────
 function TableView({entries}){
   const sorted=Object.keys(entries).sort().reverse();
-  if(!sorted.length)return<div style={{textAlign:"center",padding:"56px 0",color:TEXT2,fontSize:"14px"}}>
-    Nenhum registro ainda.</div>;
-
+  if(!sorted.length)return<div style={{textAlign:"center",padding:"56px 0",color:TEXT2,fontSize:"14px"}}>Nenhum registro ainda.</div>;
   return<div style={{overflowX:"auto"}}>
     <table style={{width:"100%",borderCollapse:"collapse",fontSize:"11px",whiteSpace:"nowrap"}}>
       <thead>
         <tr style={{borderBottom:`1px solid ${BORDER}`}}>
-          <th style={{textAlign:"left",padding:"8px 8px 8px 0",color:TEXT2,fontWeight:"600",position:"sticky",left:0,background:BG,zIndex:1}}>Data</th>
-          {DIMS.map(d=><th key={d.id} style={{padding:"8px 6px",color:TEXT2,fontWeight:"600",textAlign:"center"}}>
-            {d.icon}
-          </th>)}
+          <th style={{textAlign:"left",padding:"8px 8px 8px 0",color:TEXT2,fontWeight:"600",position:"sticky",left:0,background:SURFACE2,zIndex:1}}>Data</th>
+          {DIMS.map(d=><th key={d.id} style={{padding:"8px 6px",color:TEXT2,fontWeight:"600",textAlign:"center"}}>{d.icon}</th>)}
           <th style={{padding:"8px 6px",color:TEXT2,fontWeight:"600",textAlign:"center"}}>Méd</th>
         </tr>
       </thead>
       <tbody>
         {sorted.map(date=>{
-          const e=entries[date];
-          const av=avg(e);
+          const e=entries[date];const av=avg(e);
           return<tr key={date} style={{borderBottom:`1px solid ${BORDER}22`}}>
-            <td style={{padding:"8px 8px 8px 0",color:TEXT2,fontWeight:"500",position:"sticky",left:0,background:BG,zIndex:1}}>
-              {fmtS(date)}<br/>
-              <span style={{fontSize:"10px",opacity:.6}}>{new Date(date+"T12:00:00").toLocaleDateString("pt-BR",{weekday:"short"})}</span>
+            <td style={{padding:"8px 8px 8px 0",color:TEXT2,fontWeight:"500",position:"sticky",left:0,background:SURFACE2,zIndex:1}}>
+              {fmtS(date)}<br/><span style={{fontSize:"10px",opacity:.6}}>{new Date(date+"T12:00:00").toLocaleDateString("pt-BR",{weekday:"short"})}</span>
             </td>
             {DIMS.map(d=><td key={d.id} style={{padding:"8px 6px",textAlign:"center"}}>
               <span style={{fontWeight:"700",color:e[d.id]?C[e[d.id]]:TEXT2,fontSize:"13px"}}>{e[d.id]||"—"}</span>
@@ -417,8 +430,8 @@ function TableView({entries}){
   </div>;
 }
 
-// ── Aba Tratamento ────────────────────────────────────────────────────────
-function TratamentoTab({meds,setMeds}){
+// ── Tratamento ────────────────────────────────────────────────────────────
+function TratamentoTab({meds,setMeds,onMedChange,onMedDelete}){
   const[showAdd,setShowAdd]=useState(false);
   const[doseModal,setDoseModal]=useState(null);
   const blank={nome:"",principioAtivo:"",prescritor:"",dataInicio:today(),precoEmb:"",capsulasEmb:"30",mgInicial:""};
@@ -429,16 +442,22 @@ function TratamentoTab({meds,setMeds}){
     if(!form.nome||!form.dataInicio)return;
     const doses=form.mgInicial?[{id:uid(),data:form.dataInicio,mg:parseFloat(form.mgInicial)}]:[];
     const med={id:uid(),...form,precoEmb:parseFloat(form.precoEmb)||0,capsulasEmb:parseInt(form.capsulasEmb)||30,doses,dataFim:null};
-    const u=[...meds,med];setMeds(u);persist(MED_KEY,u);setShowAdd(false);setForm(blank);
+    const u=[...meds,med];setMeds(u);persist(MED_KEY,u);onMedChange(med);setShowAdd(false);setForm(blank);
   };
   const addDose=id=>{
     if(!doseForm.mg)return;
     const u=meds.map(m=>m.id===id?{...m,doses:[...m.doses,{id:uid(),...doseForm,mg:parseFloat(doseForm.mg)}]}:m);
-    setMeds(u);persist(MED_KEY,u);setDoseModal(null);setDoseForm({data:today(),mg:""});
+    setMeds(u);persist(MED_KEY,u);const med=u.find(m=>m.id===id);if(med)onMedChange(med);
+    setDoseModal(null);setDoseForm({data:today(),mg:""});
   };
-  const toggleFim=id=>{const u=meds.map(m=>m.id===id?{...m,dataFim:m.dataFim?null:today()}:m);setMeds(u);persist(MED_KEY,u)};
-  const delMed=id=>{if(!confirm("Remover este medicamento?"))return;const u=meds.filter(m=>m.id!==id);setMeds(u);persist(MED_KEY,u)};
-
+  const toggleFim=id=>{
+    const u=meds.map(m=>m.id===id?{...m,dataFim:m.dataFim?null:today()}:m);
+    setMeds(u);persist(MED_KEY,u);const med=u.find(m=>m.id===id);if(med)onMedChange(med);
+  };
+  const delMed=id=>{
+    if(!confirm("Remover este medicamento?"))return;
+    const u=meds.filter(m=>m.id!==id);setMeds(u);persist(MED_KEY,u);onMedDelete(id);
+  };
   return<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
     <button onClick={()=>setShowAdd(true)} style={{width:"100%",padding:"13px",borderRadius:"8px",
       background:`${ACCENT}15`,border:`1px solid ${ACCENT}40`,color:ACCENT,fontSize:"13px",
@@ -461,7 +480,7 @@ function TratamentoTab({meds,setMeds}){
                 background:ativo?`${SUCCESS}20`:`${TEXT2}15`,color:ativo?SUCCESS:TEXT2}}>{ativo?"Ativo":"Encerrado"}</span>
             </div>
             {med.principioAtivo&&<div style={{fontSize:"12px",color:TEXT2,marginTop:"2px"}}>{med.principioAtivo}</div>}
-            {med.prescritor&&<div style={{fontSize:"11px",color:TEXT2,marginTop:"1px",opacity:.7}}>Dr(a). {med.prescritor}</div>}
+            {med.prescritor&&<div style={{fontSize:"11px",color:TEXT2,opacity:.7}}>Dr(a). {med.prescritor}</div>}
           </div>
           <button onClick={()=>delMed(med.id)} style={{background:`${DANGER}10`,border:`1px solid ${DANGER}30`,
             borderRadius:"8px",padding:"4px 10px",fontSize:"11px",color:DANGER,marginLeft:"8px",fontFamily:"inherit"}}>✕</button>
@@ -531,24 +550,56 @@ function App(){
   const[openNotes,setOpenNotes]=useState({});
   const[saving,setSaving]=useState(false);
   const[saved,setSaved]=useState(false);
+  const[syncStatus,setSyncStatus]=useState("idle");
+
+  // Carregar do Supabase ao desbloquear
+  useEffect(()=>{
+    if(!unlocked)return;
+    setSyncStatus("syncing");
+    Promise.all([sbFetchEntries(),sbFetchMeds()])
+      .then(([remoteEntries,remoteMeds])=>{
+        // Merge: Supabase é fonte de verdade
+        const merged={...loadJ(DATA_KEY,{}),...remoteEntries};
+        setEntries(merged);persist(DATA_KEY,merged);
+        if(remoteMeds.length>0){setMeds(remoteMeds);persist(MED_KEY,remoteMeds);}
+        setSyncStatus("synced");
+        setTimeout(()=>setSyncStatus("idle"),3000);
+      })
+      .catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);});
+  },[unlocked]);
 
   useEffect(()=>{const e=entries[selDate];setDraft(e?{...e}:{});setOpenNotes({});},[selDate]);
 
   if(!unlocked)return<PinScreen onUnlock={()=>setUnlocked(true)}/>;
 
-  const isToday=selDate===today();
-  const dateLabel=isToday?"Hoje · "+new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"}):fmtF(selDate);
-  const alreadySaved=!!entries[selDate];
   const allFilled=DIMS.every(d=>draft[d.id]>0);
+  const isToday=selDate===today();
+  const alreadySaved=!!entries[selDate];
 
   const handleSave=()=>{
     if(!allFilled)return;
     setSaving(true);
     const u={...entries,[selDate]:draft};
-    persist(DATA_KEY,u);
-    setEntries(u);
-    setSaved(true);
+    persist(DATA_KEY,u);setEntries(u);setSaved(true);
+    // Sync em background
+    setSyncStatus("syncing");
+    sbUpsertEntry(selDate,draft)
+      .then(()=>{setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000);})
+      .catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);});
     setTimeout(()=>{setSaved(false);setSaving(false);setView("history");},1600);
+  };
+
+  const handleMedChange=med=>{
+    setSyncStatus("syncing");
+    sbUpsertMed(med)
+      .then(()=>{setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000);})
+      .catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);});
+  };
+  const handleMedDelete=id=>{
+    setSyncStatus("syncing");
+    sbDeleteMed(id)
+      .then(()=>{setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000);})
+      .catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);});
   };
 
   const sorted=Object.keys(entries).sort();
@@ -556,12 +607,7 @@ function App(){
   const allDoseMarkers=[...new Set(meds.flatMap(m=>m.doses.map(d=>d.data)))];
   const markersInLast7=allDoseMarkers.filter(d=>last7.includes(d));
   const medsHoje=medsAt(meds,today());
-
-  const dimAvg=id=>{
-    const v=last7.map(d=>entries[d]?.[id]).filter(Boolean);
-    return v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1):null;
-  };
-  const todayAvg=entries[today()]?avg(entries[today()]):null;
+  const dimAvg=id=>{const v=last7.map(d=>entries[d]?.[id]).filter(Boolean);return v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1):null};
 
   const navBtn=a=>({flex:1,padding:"9px 2px",borderRadius:"8px",border:"none",fontFamily:"inherit",
     background:a?`${ACCENT}20`:SURFACE2,color:a?ACCENT:TEXT2,fontSize:"12px",fontWeight:a?"600":"400",cursor:"pointer"});
@@ -572,8 +618,13 @@ function App(){
 
     {/* Header */}
     <div style={{padding:"52px 20px 16px",borderBottom:`1px solid ${BORDER}`}}>
-      <div style={{fontSize:"10px",letterSpacing:".18em",textTransform:"uppercase",color:ACCENT,marginBottom:"4px",fontWeight:"700"}}>Dashboard da Vida</div>
-      <div style={{fontSize:"21px",fontWeight:"800",color:TEXT,letterSpacing:"-.02em"}}>Acompanhamento TDAH</div>
+      <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
+        <div>
+          <div style={{fontSize:"10px",letterSpacing:".18em",textTransform:"uppercase",color:ACCENT,marginBottom:"4px",fontWeight:"700"}}>Dashboard da Vida</div>
+          <div style={{fontSize:"21px",fontWeight:"800",color:TEXT,letterSpacing:"-.02em"}}>Acompanhamento TDAH</div>
+        </div>
+        <div style={{marginTop:"4px"}}><SyncBadge status={syncStatus}/></div>
+      </div>
       <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"8px"}}>
         {medsHoje.map(m=>{const d=doseAt(m,today());return<span key={m.id}
           style={{fontSize:"11px",padding:"3px 10px",borderRadius:"20px",background:`${ACCENT}15`,color:ACCENT,fontWeight:"600"}}>
@@ -583,7 +634,7 @@ function App(){
       </div>
     </div>
 
-    {/* Nav principal */}
+    {/* Nav */}
     <div style={{display:"flex",padding:"10px 20px",gap:"6px",background:SURFACE,borderBottom:`1px solid ${BORDER}`}}>
       {[["home","Hoje"],["history","Histórico"],["stats","Evolução"],["trat","Tratamento"]].map(([v,l])=>(
         <button key={v} onClick={()=>setView(v)} style={navBtn(view===v)}>{l}</button>
@@ -592,24 +643,23 @@ function App(){
 
     <div style={{padding:"12px 20px"}}>
 
-      {/* ── HOJE (com data retroativa) ── */}
+      {/* ── HOJE ── */}
       {view==="home"&&<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-
         {/* Seletor de data */}
         <div style={{...card,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"12px"}}>
           <div>
             <div style={{fontSize:"11px",color:TEXT2,fontWeight:"600",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"3px"}}>
-              {isToday?"Data do registro":"Registro retroativo"}
+              {isToday?"Data do registro":"Registro retroativo"}</div>
+            <div style={{fontSize:"13px",fontWeight:"600",color:isToday?ACCENT:WARNING}}>
+              {isToday?"Hoje · "+new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"}):fmtF(selDate)}
             </div>
-            <div style={{fontSize:"13px",fontWeight:"600",color:isToday?ACCENT:WARNING}}>{dateLabel}</div>
           </div>
-          <input type="date" value={selDate} max={today()}
-            onChange={e=>setSelDate(e.target.value)}
+          <input type="date" value={selDate} max={today()} onChange={e=>setSelDate(e.target.value)}
             style={{...inp,width:"auto",padding:"7px 10px",fontSize:"12px",borderColor:isToday?BORDER:`${WARNING}50`}}/>
         </div>
 
-        {!isToday&&<div style={{display:"flex",alignItems:"center",gap:"8px",padding:"10px 12px",borderRadius:"8px",
-          background:`${WARNING}10`,border:`1px solid ${WARNING}30`}}>
+        {!isToday&&<div style={{display:"flex",alignItems:"center",gap:"8px",padding:"10px 12px",
+          borderRadius:"8px",background:`${WARNING}10`,border:`1px solid ${WARNING}30`}}>
           <span style={{fontSize:"16px"}}>📅</span>
           <span style={{fontSize:"12px",color:WARNING}}>Você está editando um registro passado</span>
         </div>}
@@ -626,8 +676,7 @@ function App(){
         <div style={{display:"flex",justifyContent:"flex-end"}}>
           <button onClick={()=>setAnchors(p=>!p)} style={{background:SURFACE2,border:`1px solid ${BORDER}`,
             borderRadius:"8px",padding:"4px 10px",fontSize:"11px",color:TEXT2,fontFamily:"inherit"}}>
-            {anchors?"Ocultar âncoras":"Ver âncoras"}
-          </button>
+            {anchors?"Ocultar âncoras":"Ver âncoras"}</button>
         </div>
 
         {DIMS.map(dim=><div key={dim.id} className="fa" style={card}>
@@ -659,8 +708,7 @@ function App(){
           {openNotes[dim.id]&&<textarea rows={2} placeholder={`Observação sobre ${dim.label.toLowerCase()}...`}
             value={draft[`n_${dim.id}`]||""} onChange={e=>setDraft(p=>({...p,[`n_${dim.id}`]:e.target.value}))}
             style={{marginTop:"12px",width:"100%",background:SURFACE,border:`1px solid ${BORDER}`,
-              borderRadius:"8px",padding:"10px 12px",color:TEXT,fontSize:"13px",
-              outline:"none",lineHeight:"1.5",fontFamily:"inherit"}}/>}
+              borderRadius:"8px",padding:"10px 12px",color:TEXT,fontSize:"13px",outline:"none",lineHeight:"1.5",fontFamily:"inherit"}}/>}
         </div>)}
 
         <button onClick={handleSave} disabled={!allFilled||saving} style={{width:"100%",padding:"16px",
@@ -674,25 +722,20 @@ function App(){
 
       {/* ── HISTÓRICO ── */}
       {view==="history"&&<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-        {/* Sub-nav */}
         <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
           {[["cards","Cards"],["heatmap","Heatmap"],["weekly","Semanal"],["table","Tabela"]].map(([v,l])=>(
             <button key={v} onClick={()=>setHistView(v)} style={subBtn(histView===v)}>{l}</button>
           ))}
         </div>
-
         {sorted.length>0&&<button onClick={()=>exportCSV(entries)} style={{width:"100%",padding:"11px",
           borderRadius:"8px",background:`${SUCCESS}12`,border:`1px solid ${SUCCESS}35`,
           color:SUCCESS,fontSize:"13px",fontWeight:"600",fontFamily:"inherit",
           display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}>
           ⬇ Exportar CSV ({sorted.length} registros)
         </button>}
-
-        {histView==="cards"&&(
-          sorted.length===0
-            ?<div style={{textAlign:"center",padding:"56px 0",color:TEXT2,fontSize:"14px",lineHeight:1.8}}>Nenhum registro ainda.<br/>Comece pelo "Hoje".</div>
-            :[...sorted].reverse().map(date=><HistoryItem key={date} date={date} entry={entries[date]} meds={meds} allDoseMarkers={allDoseMarkers}/>)
-        )}
+        {histView==="cards"&&(sorted.length===0
+          ?<div style={{textAlign:"center",padding:"56px 0",color:TEXT2,fontSize:"14px",lineHeight:1.8}}>Nenhum registro ainda.<br/>Comece pelo "Hoje".</div>
+          :[...sorted].reverse().map(date=><HistoryItem key={date} date={date} entry={entries[date]} meds={meds} allDoseMarkers={allDoseMarkers}/>))}
         {histView==="heatmap"&&<HeatmapView entries={entries}/>}
         {histView==="weekly"&&<WeeklyView entries={entries}/>}
         {histView==="table"&&<div style={{...card,overflowX:"auto"}}><TableView entries={entries}/></div>}
@@ -713,10 +756,8 @@ function App(){
               Média geral · últimos {last7.length} dias</div>
             <div style={{display:"flex",gap:"4px",alignItems:"flex-end",height:"52px"}}>
               {last7.map(date=>{
-                const e=entries[date];
-                const av=DIMS.reduce((s,d)=>s+(e?.[d.id]||0),0)/DIMS.length;
-                const h=Math.max(8,(av/5)*52);
-                const isDose=allDoseMarkers.includes(date);
+                const e=entries[date];const av=DIMS.reduce((s,d)=>s+(e?.[d.id]||0),0)/DIMS.length;
+                const h=Math.max(8,(av/5)*52);const isDose=allDoseMarkers.includes(date);
                 return<div key={date} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"4px"}}>
                   <div style={{width:"100%",height:`${h}px`,borderRadius:"4px 4px 2px 2px",
                     background:C[Math.round(av)],opacity:.85,outline:isDose?`2px solid ${WARNING}`:""}}/>
@@ -726,9 +767,7 @@ function App(){
             </div>
           </div>
           {DIMS.map(dim=>{
-            const av=dimAvg(dim.id);
-            const data=last7.map(d=>entries[d]?.[dim.id]).filter(Boolean);
-            const an=Math.round(parseFloat(av));
+            const av=dimAvg(dim.id);const data=last7.map(d=>entries[d]?.[dim.id]).filter(Boolean);const an=Math.round(parseFloat(av));
             return<div key={dim.id} className="fa" style={card}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:data.length>=2?"10px":"0"}}>
                 <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
@@ -747,7 +786,7 @@ function App(){
       </div>}
 
       {/* ── TRATAMENTO ── */}
-      {view==="trat"&&<TratamentoTab meds={meds} setMeds={setMeds}/>}
+      {view==="trat"&&<TratamentoTab meds={meds} setMeds={setMeds} onMedChange={handleMedChange} onMedDelete={handleMedDelete}/>}
     </div>
   </div>;
 }
