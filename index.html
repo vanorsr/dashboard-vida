@@ -3,21 +3,21 @@
 <head>
 <meta charset="UTF-8"/>
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0"/>
-<meta name="theme-color" content="#0d1117"/>
+<meta name="theme-color" content="#0F172A"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
 <title>Dashboard da Vida</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
-<link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;600;700;800&family=DM+Sans:wght@300;400;500;600&display=swap" rel="stylesheet"/>
+<link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react/18.2.0/umd/react.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/react-dom/18.2.0/umd/react-dom.production.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/babel-standalone/7.23.2/babel.min.js"></script>
 <style>
 *,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%;background:#0d1117}
-body{font-family:'DM Sans',sans-serif;color:#f1f5f9;-webkit-font-smoothing:antialiased}
+html,body{height:100%;background:#0F172A}
+body{font-family:'Poppins',sans-serif;color:#F1F5F9;-webkit-font-smoothing:antialiased}
 ::-webkit-scrollbar{width:0}
-input,textarea,button,select{font-family:'DM Sans',sans-serif}
+input,textarea,button,select{font-family:'Poppins',sans-serif}
 textarea{resize:vertical}
 input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.6)}
 @keyframes fadeUp{from{opacity:0;transform:translateY(14px)}to{opacity:1;transform:translateY(0)}}
@@ -35,9 +35,23 @@ button:active{transform:scale(.96);transition:transform .1s}
 <script type="text/babel">
 const {useState,useEffect}=React;
 
+// ── Storage keys
 const PIN_KEY="dvida_pin", DATA_KEY="dvida_entries", MED_KEY="dvida_meds", SES_KEY="dvida_session";
-const ACCENT="#64b5f6";
-const C={1:"#ef4444",2:"#f97316",3:"#eab308",4:"#22c55e",5:"#10b981"};
+
+// ── ElevaMind Dark Palette
+const BG       = "#0F172A";   // Fundo primário
+const SURFACE  = "#1E293B";   // Secundário dark
+const SURFACE2 = "#263348";   // Cards levemente mais claros
+const BORDER   = "rgba(96,165,250,0.15)";
+const ACCENT   = "#60A5FA";   // Azul claro primário
+const SUCCESS  = "#10B981";   // Sucesso escuro
+const DANGER   = "#F87171";   // Perigo escuro
+const WARNING  = "#FBBF24";   // Aviso
+const TEXT     = "#F1F5F9";   // Texto primário
+const TEXT2    = "#94A3B8";   // Texto secundário
+
+// Escala de notas — mantém semântica de saúde
+const C={1:DANGER, 2:"#FB923C", 3:WARNING, 4:"#4ADE80", 5:SUCCESS};
 
 const DIMS=[
   {id:"foco",     icon:"🎯",label:"Foco & Produtividade",   desc:["Muito disperso","Disperso","Regular","Focado","Muito focado"],
@@ -56,6 +70,7 @@ const DIMS=[
    a1:"Compra por impulso ou conta esquecida",a5:"Nenhum gasto impulsivo, finanças sob controle"},
 ];
 
+// ── Utils
 const today=()=>new Date().toISOString().split("T")[0];
 const fmtS=d=>{const[,m,dd]=d.split("-");return`${dd}/${m}`};
 const fmtF=d=>new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{weekday:"short",day:"numeric",month:"short"});
@@ -65,7 +80,7 @@ const loadJ=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch{retu
 const persist=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 
 function doseAt(med,date){
-  return [...med.doses].sort((a,b)=>a.data>b.data?1:-1).filter(d=>d.data<=date).slice(-1)[0]||null;
+  return[...med.doses].sort((a,b)=>a.data>b.data?1:-1).filter(d=>d.data<=date).slice(-1)[0]||null;
 }
 function medsAt(meds,date){
   return meds.filter(m=>m.dataInicio<=date&&(!m.dataFim||m.dataFim>=date));
@@ -85,15 +100,20 @@ function exportCSV(entries){
   URL.revokeObjectURL(url);
 }
 
-/* ── MiniBar ── */
+// ── Shared styles
+const card={background:SURFACE2,border:`1px solid ${BORDER}`,borderRadius:"12px",padding:"16px",boxShadow:"0 4px 12px rgba(0,0,0,0.12)"};
+const inp={width:"100%",background:SURFACE,border:`1px solid rgba(96,165,250,0.2)`,borderRadius:"8px",
+  padding:"10px 14px",color:TEXT,fontSize:"14px",outline:"none"};
+
+// ── MiniBar
 function MiniBar({value}){
   return<div style={{display:"flex",gap:"2px"}}>
-    {[1,2,3,4,5].map(n=><div key={n} style={{width:"7px",height:"7px",borderRadius:"2px",
-      background:n<=value?C[value]:"rgba(255,255,255,0.08)"}}/>)}
+    {[1,2,3,4,5].map(n=><div key={n} style={{width:"8px",height:"8px",borderRadius:"2px",
+      background:n<=value?C[value]:"rgba(255,255,255,0.1)"}}/>)}
   </div>;
 }
 
-/* ── TrendLine com marcadores de dose ── */
+// ── TrendLine
 function TrendLine({data,color,markers=[],dates=[]}){
   if(data.length<2)return null;
   const w=260,h=50,p=4;
@@ -103,14 +123,14 @@ function TrendLine({data,color,markers=[],dates=[]}){
   const mxs=markers.map(d=>{const i=dates.indexOf(d);return i>=0?p+(i/(data.length-1))*(w-2*p):null}).filter(x=>x!==null);
   return<svg width={w} height={h} style={{overflow:"visible",display:"block"}}>
     {mxs.map((x,i)=><line key={i} x1={x} y1={-4} x2={x} y2={h+4}
-      stroke="rgba(250,210,80,0.5)" strokeWidth="1.5" strokeDasharray="4,3"/>)}
+      stroke={`${WARNING}88`} strokeWidth="1.5" strokeDasharray="4,3"/>)}
     <path d={path} fill="none" stroke={color} strokeWidth="2"
-      strokeLinecap="round" strokeLinejoin="round" opacity=".85"/>
+      strokeLinecap="round" strokeLinejoin="round" opacity=".9"/>
     <circle cx={xs[xs.length-1]} cy={ys[ys.length-1]} r="3.5" fill={color}/>
   </svg>;
 }
 
-/* ── PIN Screen ── */
+// ── PIN Screen
 function PinScreen({onUnlock}){
   const[pin,setPin]=useState("");
   const isFirst=!localStorage.getItem(PIN_KEY);
@@ -118,6 +138,7 @@ function PinScreen({onUnlock}){
   const[conf,setConf]=useState("");
   const[err,setErr]=useState(false);
   const stored=localStorage.getItem(PIN_KEY);
+
   const err_=()=>{setErr(true);setTimeout(()=>{setErr(false);setPin("");setConf("");setStep(1)},600)};
   const digit=d=>{
     if(!isFirst){
@@ -131,62 +152,111 @@ function PinScreen({onUnlock}){
   const del=()=>{if(!isFirst||step===1)setPin(p=>p.slice(0,-1));else setConf(p=>p.slice(0,-1))};
   const cur=!isFirst?pin:step===1?pin:conf;
   const lbl=!isFirst?"Digite seu PIN":step===1?"Crie um PIN de 4 dígitos":"Confirme o PIN";
+
   return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",
-    justifyContent:"center",padding:"40px 20px",background:"linear-gradient(160deg,#0d1117,#111827)"}}>
+    justifyContent:"center",padding:"40px 20px",background:BG}}>
     <div className="fa" style={{textAlign:"center",marginBottom:"44px"}}>
       <div style={{fontSize:"38px",marginBottom:"12px"}}>🧠</div>
-      <div style={{fontFamily:"Syne",fontSize:"22px",fontWeight:"800",letterSpacing:"-.02em"}}>Dashboard da Vida</div>
-      <div style={{fontSize:"13px",color:"rgba(255,255,255,.3)",marginTop:"6px"}}>{lbl}</div>
+      <div style={{fontSize:"22px",fontWeight:"800",letterSpacing:"-.02em",color:TEXT}}>Dashboard da Vida</div>
+      <div style={{fontSize:"13px",color:TEXT2,marginTop:"6px"}}>{lbl}</div>
     </div>
     <div className={err?"shake":""} style={{display:"flex",gap:"14px",marginBottom:"40px"}}>
       {[0,1,2,3].map(i=><div key={i} style={{width:"14px",height:"14px",borderRadius:"50%",
-        background:i<cur.length?(err?"#ef4444":ACCENT):"rgba(255,255,255,.12)",transition:"background .15s"}}/>)}
+        background:i<cur.length?(err?DANGER:ACCENT):"rgba(255,255,255,.15)",transition:"background .15s"}}/>)}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,72px)",gap:"12px"}}>
       {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((k,i)=><button key={i}
         onClick={()=>{if(k==="⌫")del();else if(k!=="")digit(String(k))}}
-        style={{height:"64px",borderRadius:"16px",fontSize:k==="⌫"?"20px":"22px",fontWeight:"600",fontFamily:"Syne",
-          background:k===""?"transparent":k==="⌫"?"rgba(255,255,255,.05)":"rgba(255,255,255,.07)",
-          color:k==="⌫"?"rgba(255,255,255,.4)":"#f1f5f9",
-          border:`1px solid ${k===""?"transparent":k==="⌫"?"rgba(255,255,255,.05)":"rgba(255,255,255,.08)"}`,
+        style={{height:"64px",borderRadius:"8px",fontSize:k==="⌫"?"20px":"22px",fontWeight:"600",
+          background:k===""?"transparent":SURFACE2,
+          color:k==="⌫"?TEXT2:TEXT,
+          border:`1px solid ${k===""?"transparent":BORDER}`,
           cursor:k===""?"default":"pointer"}}>{k}</button>)}
     </div>
-    {!isFirst&&<div style={{marginTop:"28px",fontSize:"12px",color:"rgba(255,255,255,.2)"}}>
+    {!isFirst&&<div style={{marginTop:"28px",fontSize:"12px",color:TEXT2}}>
       Esqueceu o PIN? Limpe os dados do site para redefinir.</div>}
   </div>;
 }
 
-/* ── Modal ── */
+// ── Modal
 function Modal({title,onClose,children}){
-  return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.75)",zIndex:100,
+  return<div style={{position:"fixed",inset:0,background:"rgba(0,0,0,.8)",zIndex:100,
     display:"flex",alignItems:"flex-end",justifyContent:"center"}}
     onClick={e=>{if(e.target===e.currentTarget)onClose()}}>
-    <div className="si" style={{background:"#161b27",borderRadius:"20px 20px 0 0",
+    <div className="si" style={{background:SURFACE,borderRadius:"16px 16px 0 0",
       padding:"24px 20px 44px",width:"100%",maxWidth:"430px",maxHeight:"90vh",overflowY:"auto",
-      border:"1px solid rgba(255,255,255,.08)"}}>
+      border:`1px solid ${BORDER}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"20px"}}>
-        <div style={{fontFamily:"Syne",fontSize:"16px",fontWeight:"700"}}>{title}</div>
-        <button onClick={onClose} style={{background:"rgba(255,255,255,.07)",border:"1px solid rgba(255,255,255,.1)",
-          borderRadius:"8px",padding:"4px 12px",color:"rgba(255,255,255,.5)",fontSize:"13px"}}>✕</button>
+        <div style={{fontSize:"16px",fontWeight:"700",color:TEXT}}>{title}</div>
+        <button onClick={onClose} style={{background:SURFACE2,border:`1px solid ${BORDER}`,
+          borderRadius:"8px",padding:"4px 12px",color:TEXT2,fontSize:"13px"}}>✕</button>
       </div>
       {children}
     </div>
   </div>;
 }
 
-const inp={width:"100%",background:"rgba(255,255,255,.05)",border:"1px solid rgba(255,255,255,.1)",
-  borderRadius:"10px",padding:"10px 14px",color:"#f1f5f9",fontSize:"14px",outline:"none"};
-
 function Field({label,hint,children}){
   return<div style={{marginBottom:"14px"}}>
-    <div style={{fontSize:"11px",color:"rgba(255,255,255,.4)",textTransform:"uppercase",
+    <div style={{fontSize:"11px",color:TEXT2,textTransform:"uppercase",
       letterSpacing:".08em",fontWeight:"600",marginBottom:"6px"}}>{label}</div>
     {children}
-    {hint&&<div style={{fontSize:"11px",color:"rgba(255,255,255,.25)",marginTop:"4px"}}>{hint}</div>}
+    {hint&&<div style={{fontSize:"11px",color:TEXT2,marginTop:"4px",opacity:.7}}>{hint}</div>}
   </div>;
 }
 
-/* ── Aba Tratamento ── */
+// ── HistoryItem — componente próprio para evitar hooks dentro de map ──
+function HistoryItem({date,entry,meds,allDoseMarkers}){
+  const[open,setOpen]=useState(false);
+  const avg=(DIMS.reduce((s,d)=>s+(entry[d.id]||0),0)/DIMS.length).toFixed(1);
+  const hasN=DIMS.some(d=>entry[`n_${d.id}`]);
+  const medsNoDia=medsAt(meds,date);
+  const isDoseDay=allDoseMarkers.includes(date);
+
+  return<div className="fa" style={{...card,
+    border:isDoseDay?`1px solid ${WARNING}44`:`1px solid ${BORDER}`}}>
+    {isDoseDay&&<div style={{fontSize:"11px",color:WARNING,marginBottom:"8px",
+      display:"flex",alignItems:"center",gap:"6px"}}>⚡ Ajuste de dose neste dia</div>}
+    <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
+      <div>
+        <div style={{fontSize:"13px",fontWeight:"600",color:TEXT}}>{fmtF(date)}</div>
+        <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginTop:"4px"}}>
+          {medsNoDia.map(m=>{const d=doseAt(m,date);return<span key={m.id}
+            style={{fontSize:"10px",padding:"2px 8px",borderRadius:"20px",
+              background:`${ACCENT}15`,color:ACCENT,fontWeight:"500"}}>
+            {m.nome}{d?` ${d.mg}mg`:""}
+          </span>})}
+        </div>
+        {hasN&&<button onClick={()=>setOpen(p=>!p)} style={{background:"none",border:"none",
+          padding:"2px 0 0",fontSize:"11px",color:`${ACCENT}99`,cursor:"pointer",fontFamily:"inherit"}}>
+          {open?"▲ ocultar notas":"▼ ver notas"}
+        </button>}
+      </div>
+      <div style={{display:"flex",alignItems:"baseline",gap:"3px"}}>
+        <span style={{fontSize:"20px",fontWeight:"800",color:C[Math.round(avg)]}}>{avg}</span>
+        <span style={{fontSize:"11px",color:TEXT2}}>/5</span>
+      </div>
+    </div>
+    <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px"}}>
+      {DIMS.map(dim=><div key={dim.id} style={{display:"flex",alignItems:"center",gap:"6px"}}>
+        <span style={{fontSize:"12px"}}>{dim.icon}</span>
+        <MiniBar value={entry[dim.id]||0}/>
+        <span style={{fontSize:"11px",fontWeight:"600",
+          color:entry[dim.id]?C[entry[dim.id]]:TEXT2}}>{entry[dim.id]||"-"}</span>
+      </div>)}
+    </div>
+    {open&&<div style={{marginTop:"12px",paddingTop:"12px",
+      borderTop:`1px solid ${BORDER}`,display:"flex",flexDirection:"column",gap:"10px"}}>
+      {DIMS.filter(d=>entry[`n_${d.id}`]).map(dim=><div key={dim.id}>
+        <div style={{fontSize:"11px",color:TEXT2,marginBottom:"3px",
+          display:"flex",gap:"4px"}}>{dim.icon} {dim.label}</div>
+        <div style={{fontSize:"13px",color:TEXT,lineHeight:1.5,opacity:.85}}>{entry[`n_${dim.id}`]}</div>
+      </div>)}
+    </div>}
+  </div>;
+}
+
+// ── Aba Tratamento ──
 function TratamentoTab({meds,setMeds}){
   const[showAdd,setShowAdd]=useState(false);
   const[doseModal,setDoseModal]=useState(null);
@@ -219,16 +289,14 @@ function TratamentoTab({meds,setMeds}){
     const u=meds.filter(m=>m.id!==id);setMeds(u);persist(MED_KEY,u);
   };
 
-  const card={background:"rgba(255,255,255,.035)",border:"1px solid rgba(255,255,255,.07)",borderRadius:"18px",padding:"16px"};
-
   return<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-    <button onClick={()=>setShowAdd(true)} style={{width:"100%",padding:"13px",borderRadius:"12px",
-      background:"rgba(100,181,246,.1)",border:"1px solid rgba(100,181,246,.2)",
+    <button onClick={()=>setShowAdd(true)} style={{width:"100%",padding:"13px",borderRadius:"8px",
+      background:`${ACCENT}15`,border:`1px solid ${ACCENT}40`,
       color:ACCENT,fontSize:"13px",fontWeight:"600",display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}>
       + Adicionar medicamento
     </button>
 
-    {meds.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:"rgba(255,255,255,.2)",
+    {meds.length===0&&<div style={{textAlign:"center",padding:"48px 0",color:TEXT2,
       fontSize:"14px",lineHeight:1.8}}>Nenhum medicamento cadastrado.<br/>Adicione seu tratamento acima.</div>}
 
     {meds.map(med=>{
@@ -236,108 +304,99 @@ function TratamentoTab({meds,setMeds}){
       const custoDia=med.precoEmb&&med.capsulasEmb?med.precoEmb/med.capsulasEmb:0;
       const dosesSort=[...med.doses].sort((a,b)=>a.data>b.data?1:-1);
       const doseAtual=dosesSort[dosesSort.length-1];
-      return<div key={med.id} className="fa" style={{...card,opacity:ativo?1:.65}}>
+      return<div key={med.id} className="fa" style={{...card,opacity:ativo?1:.6}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
           <div style={{flex:1}}>
             <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
-              <span style={{fontFamily:"Syne",fontSize:"16px",fontWeight:"700"}}>{med.nome}</span>
+              <span style={{fontSize:"16px",fontWeight:"700",color:TEXT}}>{med.nome}</span>
               <span style={{fontSize:"10px",fontWeight:"600",padding:"2px 8px",borderRadius:"20px",
-                background:ativo?"rgba(16,185,129,.15)":"rgba(255,255,255,.07)",
-                color:ativo?"#10b981":"rgba(255,255,255,.3)"}}>
+                background:ativo?`${SUCCESS}20`:`${TEXT2}15`,
+                color:ativo?SUCCESS:TEXT2}}>
                 {ativo?"Ativo":"Encerrado"}
               </span>
             </div>
-            {med.principioAtivo&&<div style={{fontSize:"12px",color:"rgba(255,255,255,.35)",marginTop:"2px"}}>{med.principioAtivo}</div>}
-            {med.prescritor&&<div style={{fontSize:"11px",color:"rgba(255,255,255,.25)",marginTop:"1px"}}>Dr(a). {med.prescritor}</div>}
+            {med.principioAtivo&&<div style={{fontSize:"12px",color:TEXT2,marginTop:"2px"}}>{med.principioAtivo}</div>}
+            {med.prescritor&&<div style={{fontSize:"11px",color:TEXT2,marginTop:"1px",opacity:.7}}>Dr(a). {med.prescritor}</div>}
           </div>
-          <button onClick={()=>delMed(med.id)} style={{background:"rgba(239,68,68,.08)",
-            border:"1px solid rgba(239,68,68,.15)",borderRadius:"8px",padding:"4px 10px",
-            fontSize:"11px",color:"rgba(239,68,68,.6)",marginLeft:"8px"}}>✕</button>
+          <button onClick={()=>delMed(med.id)} style={{background:`${DANGER}10`,
+            border:`1px solid ${DANGER}30`,borderRadius:"8px",padding:"4px 10px",
+            fontSize:"11px",color:DANGER,marginLeft:"8px"}}>✕</button>
         </div>
 
-        {/* Pills de info */}
         <div style={{display:"flex",flexWrap:"wrap",gap:"6px",marginBottom:"14px"}}>
           <span style={{fontSize:"11px",padding:"4px 10px",borderRadius:"20px",
-            background:"rgba(255,255,255,.05)",color:"rgba(255,255,255,.4)"}}>
-            📅 {fmtS(med.dataInicio)}{med.dataFim?` → ${fmtS(med.dataFim)}`:""}
-          </span>
+            background:SURFACE,color:TEXT2}}>📅 {fmtS(med.dataInicio)}{med.dataFim?` → ${fmtS(med.dataFim)}`:""}</span>
           {doseAtual&&<span style={{fontSize:"11px",padding:"4px 10px",borderRadius:"20px",
-            background:"rgba(100,181,246,.1)",color:ACCENT,fontWeight:"600"}}>
-            💊 {doseAtual.mg}mg atual
-          </span>}
+            background:`${ACCENT}15`,color:ACCENT,fontWeight:"600"}}>💊 {doseAtual.mg}mg</span>}
           {custoDia>0&&<span style={{fontSize:"11px",padding:"4px 10px",borderRadius:"20px",
-            background:"rgba(16,185,129,.1)",color:"#10b981"}}>
-            {brl(custoDia)}/dia
-          </span>}
+            background:`${SUCCESS}15`,color:SUCCESS}}>{brl(custoDia)}/dia</span>}
           {med.precoEmb>0&&<span style={{fontSize:"11px",padding:"4px 10px",borderRadius:"20px",
-            background:"rgba(255,255,255,.05)",color:"rgba(255,255,255,.35)"}}>
-            Emb: {brl(med.precoEmb)} · {med.capsulasEmb} caps
-          </span>}
+            background:SURFACE,color:TEXT2}}>Emb: {brl(med.precoEmb)} · {med.capsulasEmb} caps</span>}
         </div>
 
-        {/* Timeline de doses */}
         {dosesSort.length>0&&<div style={{marginBottom:"14px"}}>
-          <div style={{fontSize:"11px",color:"rgba(255,255,255,.3)",textTransform:"uppercase",
+          <div style={{fontSize:"11px",color:TEXT2,textTransform:"uppercase",
             letterSpacing:".08em",fontWeight:"600",marginBottom:"8px"}}>Histórico de dosagem</div>
           <div style={{position:"relative",paddingLeft:"18px"}}>
-            <div style={{position:"absolute",left:"7px",top:0,bottom:0,width:"1px",background:"rgba(255,255,255,.08)"}}/>
+            <div style={{position:"absolute",left:"7px",top:0,bottom:0,width:"1px",background:BORDER}}/>
             {dosesSort.map((d,i)=><div key={d.id} style={{position:"relative",marginBottom:"8px",
               display:"flex",alignItems:"center",gap:"10px"}}>
               <div style={{position:"absolute",left:"-13px",width:"8px",height:"8px",borderRadius:"50%",
-                background:i===dosesSort.length-1?ACCENT:"rgba(255,255,255,.2)",
-                border:`2px solid ${i===dosesSort.length-1?ACCENT:"rgba(255,255,255,.1)"}`}}/>
-              <span style={{fontSize:"12px",color:"rgba(255,255,255,.4)",minWidth:"50px"}}>{fmtS(d.data)}</span>
+                background:i===dosesSort.length-1?ACCENT:TEXT2,
+                border:`2px solid ${i===dosesSort.length-1?ACCENT:SURFACE}`}}/>
+              <span style={{fontSize:"12px",color:TEXT2,minWidth:"50px"}}>{fmtS(d.data)}</span>
               <span style={{fontSize:"13px",fontWeight:"600",
-                color:i===dosesSort.length-1?ACCENT:"rgba(255,255,255,.6)"}}>{d.mg}mg</span>
+                color:i===dosesSort.length-1?ACCENT:TEXT}}>{d.mg}mg</span>
               {i===dosesSort.length-1&&<span style={{fontSize:"10px",color:ACCENT,opacity:.6}}>atual</span>}
             </div>)}
           </div>
         </div>}
 
         <div style={{display:"flex",gap:"8px"}}>
-          <button onClick={()=>setDoseModal(med.id)} style={{flex:1,padding:"9px",borderRadius:"10px",
-            background:"rgba(100,181,246,.08)",border:"1px solid rgba(100,181,246,.15)",
-            color:ACCENT,fontSize:"12px",fontWeight:"600"}}>+ Ajuste de dose</button>
-          <button onClick={()=>toggleFim(med.id)} style={{flex:1,padding:"9px",borderRadius:"10px",
-            background:"rgba(255,255,255,.04)",border:"1px solid rgba(255,255,255,.08)",
-            color:"rgba(255,255,255,.4)",fontSize:"12px"}}>
-            {ativo?"Encerrar tratamento":"Reativar"}
+          <button onClick={()=>setDoseModal(med.id)} style={{flex:1,padding:"9px",borderRadius:"8px",
+            background:`${ACCENT}10`,border:`1px solid ${ACCENT}30`,
+            color:ACCENT,fontSize:"12px",fontWeight:"600",fontFamily:"inherit"}}>+ Ajuste de dose</button>
+          <button onClick={()=>toggleFim(med.id)} style={{flex:1,padding:"9px",borderRadius:"8px",
+            background:SURFACE,border:`1px solid ${BORDER}`,
+            color:TEXT2,fontSize:"12px",fontFamily:"inherit"}}>
+            {ativo?"Encerrar":"Reativar"}
           </button>
         </div>
       </div>;
     })}
 
     {showAdd&&<Modal title="Novo medicamento" onClose={()=>setShowAdd(false)}>
-      <Field label="Nome do medicamento *"><input style={inp} placeholder="Ex: Atentah" value={form.nome} onChange={f("nome")}/></Field>
+      <Field label="Nome *"><input style={inp} placeholder="Ex: Atentah" value={form.nome} onChange={f("nome")}/></Field>
       <Field label="Princípio ativo"><input style={inp} placeholder="Ex: Atomoxetina" value={form.principioAtivo} onChange={f("principioAtivo")}/></Field>
       <Field label="Prescritor"><input style={inp} placeholder="Nome do psiquiatra" value={form.prescritor} onChange={f("prescritor")}/></Field>
       <Field label="Data de início *"><input style={inp} type="date" value={form.dataInicio} onChange={f("dataInicio")}/></Field>
       <Field label="Dose inicial (mg)"><input style={inp} type="number" placeholder="Ex: 25" value={form.mgInicial} onChange={f("mgInicial")}/></Field>
       <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"10px"}}>
-        <Field label="Preço da embalagem (R$)"><input style={inp} type="number" placeholder="0,00" value={form.precoEmb} onChange={f("precoEmb")}/></Field>
+        <Field label="Preço embalagem (R$)"><input style={inp} type="number" placeholder="0,00" value={form.precoEmb} onChange={f("precoEmb")}/></Field>
         <Field label="Cápsulas / embalagem"><input style={inp} type="number" placeholder="30" value={form.capsulasEmb} onChange={f("capsulasEmb")}/></Field>
       </div>
-      <button onClick={addMed} style={{width:"100%",padding:"14px",borderRadius:"12px",border:"none",
-        background:"linear-gradient(135deg,#2563eb,#64b5f6)",color:"#fff",fontSize:"14px",fontWeight:"700",
-        fontFamily:"Syne",marginTop:"4px"}}>Salvar medicamento</button>
+      <button onClick={addMed} style={{width:"100%",padding:"14px",borderRadius:"8px",border:"none",
+        background:ACCENT,color:"#fff",fontSize:"14px",fontWeight:"700",fontFamily:"inherit",marginTop:"4px"}}>
+        Salvar medicamento
+      </button>
     </Modal>}
 
     {doseModal&&<Modal title="Registrar ajuste de dose" onClose={()=>setDoseModal(null)}>
-      <div style={{fontSize:"13px",color:"rgba(255,255,255,.4)",marginBottom:"16px"}}>
+      <div style={{fontSize:"13px",color:TEXT2,marginBottom:"16px"}}>
         {meds.find(m=>m.id===doseModal)?.nome}
       </div>
       <Field label="Data do ajuste"><input style={inp} type="date" value={doseForm.data}
         onChange={e=>setDoseForm(p=>({...p,data:e.target.value}))}/></Field>
       <Field label="Nova dose (mg)"><input style={inp} type="number" placeholder="Ex: 40"
         value={doseForm.mg} onChange={e=>setDoseForm(p=>({...p,mg:e.target.value}))}/></Field>
-      <button onClick={()=>addDose(doseModal)} style={{width:"100%",padding:"14px",borderRadius:"12px",
-        border:"none",background:"linear-gradient(135deg,#2563eb,#64b5f6)",color:"#fff",
-        fontSize:"14px",fontWeight:"700",fontFamily:"Syne",marginTop:"4px"}}>Registrar ajuste</button>
+      <button onClick={()=>addDose(doseModal)} style={{width:"100%",padding:"14px",borderRadius:"8px",
+        border:"none",background:ACCENT,color:"#fff",fontSize:"14px",fontWeight:"700",
+        fontFamily:"inherit",marginTop:"4px"}}>Registrar ajuste</button>
     </Modal>}
   </div>;
 }
 
-/* ── App principal ── */
+// ── App Principal ──
 function App(){
   const[unlocked,setUnlocked]=useState(!!sessionStorage.getItem(SES_KEY));
   const[view,setView]=useState("home");
@@ -349,7 +408,10 @@ function App(){
   const[saving,setSaving]=useState(false);
   const[saved,setSaved]=useState(false);
 
-  useEffect(()=>{const e=entries[today()];setDraft(e?{...e}:{});},[]);
+  useEffect(()=>{
+    const e=entries[today()];
+    setDraft(e?{...e}:{});
+  },[]);
 
   if(!unlocked)return<PinScreen onUnlock={()=>setUnlocked(true)}/>;
 
@@ -364,77 +426,85 @@ function App(){
     persist(DATA_KEY,u);
     setEntries(u);
     setSaved(true);
-    setTimeout(()=>{setSaved(false);setSaving(false);setView("history");},1600);
+    setTimeout(()=>{
+      setSaved(false);
+      setSaving(false);
+      setView("history");
+    },1600);
   };
 
   const sorted=Object.keys(entries).sort();
   const last7=sorted.slice(-7);
   const todayOk=!!entries[today()];
   const todayAvg=todayOk?(DIMS.reduce((s,d)=>s+(entries[today()]?.[d.id]||0),0)/DIMS.length).toFixed(1):null;
-  const dimAvg=id=>{const v=last7.map(d=>entries[d]?.[id]).filter(Boolean);return v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1):null};
+  const dimAvg=id=>{
+    const v=last7.map(d=>entries[d]?.[id]).filter(Boolean);
+    return v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1):null;
+  };
 
-  // Todos os dias com mudança de dose
   const allDoseMarkers=[...new Set(meds.flatMap(m=>m.doses.map(d=>d.data)))];
   const markersInLast7=allDoseMarkers.filter(d=>last7.includes(d));
-
   const medsHoje=medsAt(meds,today());
 
-  const card={background:"rgba(255,255,255,.035)",border:"1px solid rgba(255,255,255,.07)",borderRadius:"18px",padding:"16px"};
-  const navBtn=a=>({flex:1,padding:"9px 2px",borderRadius:"10px",border:"none",
-    background:a?"rgba(100,181,246,.14)":"rgba(255,255,255,.03)",
-    color:a?ACCENT:"rgba(255,255,255,.35)",fontSize:"12px",fontWeight:a?"600":"400",cursor:"pointer"});
+  const navBtn=a=>({
+    flex:1,padding:"9px 2px",borderRadius:"8px",border:"none",
+    background:a?`${ACCENT}20`:SURFACE2,
+    color:a?ACCENT:TEXT2,
+    fontSize:"12px",fontWeight:a?"600":"400",cursor:"pointer",
+    transition:"all .2s",fontFamily:"inherit",
+  });
 
-  return<div style={{minHeight:"100vh",maxWidth:"430px",margin:"0 auto",paddingBottom:"90px",
-    background:"linear-gradient(160deg,#0d1117 0%,#111827 60%,#0f172a 100%)"}}>
+  return<div style={{minHeight:"100vh",maxWidth:"430px",margin:"0 auto",
+    paddingBottom:"90px",background:BG}}>
 
     {/* Header */}
-    <div style={{padding:"52px 20px 16px",borderBottom:"1px solid rgba(255,255,255,.06)"}}>
+    <div style={{padding:"52px 20px 16px",borderBottom:`1px solid ${BORDER}`}}>
       <div style={{fontSize:"10px",letterSpacing:".18em",textTransform:"uppercase",
-        color:ACCENT,marginBottom:"4px",fontWeight:"700",fontFamily:"Syne"}}>Dashboard da Vida</div>
-      <div style={{fontFamily:"Syne",fontSize:"21px",fontWeight:"800",letterSpacing:"-.02em"}}>
+        color:ACCENT,marginBottom:"4px",fontWeight:"700"}}>Dashboard da Vida</div>
+      <div style={{fontSize:"21px",fontWeight:"800",color:TEXT,letterSpacing:"-.02em"}}>
         Acompanhamento TDAH</div>
       <div style={{display:"flex",gap:"6px",flexWrap:"wrap",marginTop:"8px"}}>
         {medsHoje.map(m=>{const d=doseAt(m,today());return<span key={m.id}
           style={{fontSize:"11px",padding:"3px 10px",borderRadius:"20px",
-            background:"rgba(100,181,246,.1)",color:ACCENT,fontWeight:"600"}}>
+            background:`${ACCENT}15`,color:ACCENT,fontWeight:"600"}}>
           💊 {m.nome}{d?` ${d.mg}mg`:""}
         </span>})}
-        {medsHoje.length===0&&<span style={{fontSize:"11px",color:"rgba(255,255,255,.2)"}}>
+        {medsHoje.length===0&&<span style={{fontSize:"11px",color:TEXT2}}>
           {meds.length===0?"Cadastre seu tratamento na aba Tratamento":"Nenhum medicamento ativo"}
         </span>}
       </div>
     </div>
 
     {/* Nav */}
-    <div style={{display:"flex",padding:"10px 20px",gap:"6px"}}>
+    <div style={{display:"flex",padding:"10px 20px",gap:"6px",background:SURFACE,
+      borderBottom:`1px solid ${BORDER}`}}>
       {[["home","Hoje"],["history","Histórico"],["stats","Evolução"],["trat","Tratamento"]].map(([v,l])=>(
         <button key={v} onClick={()=>setView(v)} style={navBtn(view===v)}>{l}</button>
       ))}
     </div>
 
-    <div style={{padding:"8px 20px"}}>
+    <div style={{padding:"12px 20px"}}>
 
       {/* ── HOJE ── */}
       {view==="home"&&<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-        {todayOk&&<div className="fa" style={{...card,background:"rgba(16,185,129,.07)",
-          border:"1px solid rgba(16,185,129,.18)",display:"flex",alignItems:"center",gap:"12px"}}>
+        {todayOk&&<div className="fa" style={{...card,background:`${SUCCESS}15`,
+          border:`1px solid ${SUCCESS}40`,display:"flex",alignItems:"center",gap:"12px"}}>
           <span style={{fontSize:"24px"}}>✅</span>
           <div>
-            <div style={{fontWeight:"600",fontSize:"14px"}}>Registrado hoje</div>
-            <div style={{fontSize:"12px",color:"rgba(255,255,255,.35)"}}>
+            <div style={{fontWeight:"600",fontSize:"14px",color:TEXT}}>Registrado hoje</div>
+            <div style={{fontSize:"12px",color:TEXT2}}>
               Média: <span style={{color:C[Math.round(todayAvg)],fontWeight:"700"}}>{todayAvg}</span>
             </div>
           </div>
         </div>}
 
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"center"}}>
-          <div style={{fontSize:"12px",color:"rgba(255,255,255,.3)",textTransform:"uppercase",
-            letterSpacing:".05em",fontWeight:"500"}}>
+          <div style={{fontSize:"12px",color:TEXT2,fontWeight:"500"}}>
             {new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"})}
           </div>
-          <button onClick={()=>setAnchors(p=>!p)} style={{background:"rgba(255,255,255,.05)",
-            border:"1px solid rgba(255,255,255,.08)",borderRadius:"8px",padding:"4px 10px",
-            fontSize:"11px",color:"rgba(255,255,255,.35)"}}>
+          <button onClick={()=>setAnchors(p=>!p)} style={{background:SURFACE2,
+            border:`1px solid ${BORDER}`,borderRadius:"8px",padding:"4px 10px",
+            fontSize:"11px",color:TEXT2,fontFamily:"inherit"}}>
             {anchors?"Ocultar âncoras":"Ver âncoras"}
           </button>
         </div>
@@ -443,128 +513,91 @@ function App(){
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"12px"}}>
             <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
               <span style={{fontSize:"19px"}}>{dim.icon}</span>
-              <span style={{fontSize:"14px",fontWeight:"600"}}>{dim.label}</span>
+              <span style={{fontSize:"14px",fontWeight:"600",color:TEXT}}>{dim.label}</span>
             </div>
             <button onClick={()=>setOpenNotes(p=>({...p,[dim.id]:!p[dim.id]}))} style={{
-              background:openNotes[dim.id]?"rgba(100,181,246,.12)":"rgba(255,255,255,.05)",
-              border:"1px solid rgba(255,255,255,.08)",borderRadius:"8px",padding:"3px 10px",
-              fontSize:"11px",color:openNotes[dim.id]?ACCENT:"rgba(255,255,255,.3)"}}>+ nota</button>
+              background:openNotes[dim.id]?`${ACCENT}15`:SURFACE,
+              border:`1px solid ${BORDER}`,borderRadius:"8px",padding:"3px 10px",
+              fontSize:"11px",color:openNotes[dim.id]?ACCENT:TEXT2,fontFamily:"inherit"}}>+ nota</button>
           </div>
+
+          {/* Escala */}
           <div style={{display:"flex",gap:"6px",justifyContent:"center"}}>
             {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setScore(dim.id,n)} style={{
-              width:"46px",height:"46px",borderRadius:"12px",
-              border:draft[dim.id]===n?`2px solid ${C[n]}`:"2px solid rgba(255,255,255,.07)",
-              background:draft[dim.id]===n?`${C[n]}1A`:"rgba(255,255,255,.03)",
-              color:draft[dim.id]===n?C[n]:"rgba(255,255,255,.3)",
-              fontSize:"16px",fontWeight:draft[dim.id]===n?"700":"400",transition:"all .15s"}}>{n}</button>)}
+              width:"46px",height:"46px",borderRadius:"8px",
+              border:draft[dim.id]===n?`2px solid ${C[n]}`:`1px solid ${BORDER}`,
+              background:draft[dim.id]===n?`${C[n]}20`:SURFACE,
+              color:draft[dim.id]===n?C[n]:TEXT2,
+              fontSize:"16px",fontWeight:draft[dim.id]===n?"700":"400",
+              transition:"all .15s",fontFamily:"inherit"}}>{n}</button>)}
           </div>
+
           {draft[dim.id]>0&&<div style={{textAlign:"center",fontSize:"11px",color:C[draft[dim.id]],
             fontWeight:"600",letterSpacing:".05em",textTransform:"uppercase",marginTop:"8px"}}>
             {dim.desc[draft[dim.id]-1]}
           </div>}
+
           {anchors&&<div style={{display:"flex",justifyContent:"space-between",marginTop:"10px",gap:"8px"}}>
-            <div style={{fontSize:"10px",color:"rgba(255,255,255,.2)",maxWidth:"46%",lineHeight:1.4}}>① {dim.a1}</div>
-            <div style={{fontSize:"10px",color:"rgba(255,255,255,.2)",maxWidth:"46%",lineHeight:1.4,textAlign:"right"}}>⑤ {dim.a5}</div>
+            <div style={{fontSize:"10px",color:TEXT2,maxWidth:"46%",lineHeight:1.4,opacity:.8}}>① {dim.a1}</div>
+            <div style={{fontSize:"10px",color:TEXT2,maxWidth:"46%",lineHeight:1.4,textAlign:"right",opacity:.8}}>⑤ {dim.a5}</div>
           </div>}
+
           {openNotes[dim.id]&&<textarea rows={2} placeholder={`Observação sobre ${dim.label.toLowerCase()}...`}
             value={draft[`n_${dim.id}`]||""} onChange={e=>setNote(dim.id,e.target.value)}
-            style={{marginTop:"12px",width:"100%",background:"rgba(255,255,255,.04)",
-              border:"1px solid rgba(255,255,255,.09)",borderRadius:"10px",padding:"10px 12px",
-              color:"#f1f5f9",fontSize:"13px",outline:"none",lineHeight:"1.5"}}/>}
+            style={{marginTop:"12px",width:"100%",background:SURFACE,
+              border:`1px solid ${BORDER}`,borderRadius:"8px",padding:"10px 12px",
+              color:TEXT,fontSize:"13px",outline:"none",lineHeight:"1.5",fontFamily:"inherit"}}/>}
         </div>)}
 
-        <button onClick={handleSave} disabled={!allFilled||saving} style={{width:"100%",padding:"16px",
-          borderRadius:"14px",border:"none",fontFamily:"Syne",letterSpacing:".02em",
-          background:saved?"#10b981":allFilled?"linear-gradient(135deg,#2563eb,#64b5f6)":"rgba(255,255,255,.05)",
-          color:allFilled?"#fff":"rgba(255,255,255,.2)",fontSize:"15px",fontWeight:"700",
-          cursor:allFilled?"pointer":"default",transition:"all .2s",marginTop:"4px"}}>
+        <button onClick={handleSave} disabled={!allFilled||saving} style={{
+          width:"100%",padding:"16px",borderRadius:"8px",border:"none",fontFamily:"inherit",
+          background:saved?SUCCESS:allFilled?ACCENT:SURFACE2,
+          color:allFilled?"#fff":TEXT2,
+          fontSize:"15px",fontWeight:"700",
+          cursor:allFilled?"pointer":"default",transition:"all .2s",marginTop:"4px",
+          opacity:saving?.8:1}}>
           {saved?"✓ Salvo!":saving?"Salvando...":"Salvar registro do dia"}
         </button>
       </div>}
 
       {/* ── HISTÓRICO ── */}
       {view==="history"&&<div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
-        {sorted.length>0&&<button onClick={()=>exportCSV(entries)} style={{width:"100%",padding:"12px",
-          borderRadius:"12px",background:"rgba(16,185,129,.07)",border:"1px solid rgba(16,185,129,.18)",
-          color:"#10b981",fontSize:"13px",fontWeight:"600",display:"flex",alignItems:"center",
-          justifyContent:"center",gap:"8px"}}>⬇ Exportar CSV ({sorted.length} registros)</button>}
+        {sorted.length>0&&<button onClick={()=>exportCSV(entries)} style={{
+          width:"100%",padding:"12px",borderRadius:"8px",
+          background:`${SUCCESS}15`,border:`1px solid ${SUCCESS}40`,
+          color:SUCCESS,fontSize:"13px",fontWeight:"600",fontFamily:"inherit",
+          display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}>
+          ⬇ Exportar CSV ({sorted.length} registros)
+        </button>}
 
         {sorted.length===0&&<div style={{textAlign:"center",padding:"56px 0",
-          color:"rgba(255,255,255,.2)",fontSize:"14px",lineHeight:1.8}}>
-          Nenhum registro ainda.<br/>Comece pelo "Hoje".</div>}
+          color:TEXT2,fontSize:"14px",lineHeight:1.8}}>
+          Nenhum registro ainda.<br/>Comece pelo "Hoje".
+        </div>}
 
-        {[...sorted].reverse().map(date=>{
-          const e=entries[date];
-          const avg=(DIMS.reduce((s,d)=>s+(e[d.id]||0),0)/DIMS.length).toFixed(1);
-          const hasN=DIMS.some(d=>e[`n_${d.id}`]);
-          const medsNoDia=medsAt(meds,date);
-          const isDoseDay=allDoseMarkers.includes(date);
-          const[open,setOpen]=useState(false);
-          return<div key={date} className="fa" style={{...card,
-            border:isDoseDay?"1px solid rgba(250,210,80,.25)":"1px solid rgba(255,255,255,.07)"}}>
-            {isDoseDay&&<div style={{fontSize:"11px",color:"rgba(250,210,80,.7)",marginBottom:"8px",
-              display:"flex",alignItems:"center",gap:"6px"}}>
-              <span>⚡</span> Ajuste de dose neste dia
-            </div>}
-            <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
-              <div>
-                <div style={{fontSize:"13px",fontWeight:"600"}}>{fmtF(date)}</div>
-                <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginTop:"4px"}}>
-                  {medsNoDia.map(m=>{const d=doseAt(m,date);return<span key={m.id}
-                    style={{fontSize:"10px",padding:"2px 8px",borderRadius:"20px",
-                      background:"rgba(100,181,246,.08)",color:"rgba(100,181,246,.7)"}}>
-                    {m.nome}{d?` ${d.mg}mg`:""}
-                  </span>})}
-                </div>
-                {hasN&&<button onClick={()=>setOpen(p=>!p)} style={{background:"none",border:"none",
-                  padding:"2px 0 0",fontSize:"11px",color:"rgba(100,181,246,.5)",cursor:"pointer"}}>
-                  {open?"▲ ocultar notas":"▼ ver notas"}
-                </button>}
-              </div>
-              <div style={{display:"flex",alignItems:"baseline",gap:"3px"}}>
-                <span style={{fontFamily:"Syne",fontSize:"20px",fontWeight:"800",
-                  color:C[Math.round(avg)]}}>{avg}</span>
-                <span style={{fontSize:"11px",color:"rgba(255,255,255,.2)"}}>/5</span>
-              </div>
-            </div>
-            <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px"}}>
-              {DIMS.map(dim=><div key={dim.id} style={{display:"flex",alignItems:"center",gap:"6px"}}>
-                <span style={{fontSize:"12px"}}>{dim.icon}</span>
-                <MiniBar value={e[dim.id]||0}/>
-                <span style={{fontSize:"11px",fontWeight:"600",
-                  color:e[dim.id]?C[e[dim.id]]:"rgba(255,255,255,.2)"}}>{e[dim.id]||"-"}</span>
-              </div>)}
-            </div>
-            {open&&<div style={{marginTop:"12px",paddingTop:"12px",
-              borderTop:"1px solid rgba(255,255,255,.06)",display:"flex",flexDirection:"column",gap:"10px"}}>
-              {DIMS.filter(d=>e[`n_${d.id}`]).map(dim=><div key={dim.id}>
-                <div style={{fontSize:"11px",color:"rgba(255,255,255,.28)",marginBottom:"3px",
-                  display:"flex",gap:"4px"}}>{dim.icon} {dim.label}</div>
-                <div style={{fontSize:"13px",color:"rgba(255,255,255,.65)",lineHeight:1.5}}>{e[`n_${dim.id}`]}</div>
-              </div>)}
-            </div>}
-          </div>;
-        })}
+        {[...sorted].reverse().map(date=>(
+          <HistoryItem key={date} date={date} entry={entries[date]}
+            meds={meds} allDoseMarkers={allDoseMarkers}/>
+        ))}
       </div>}
 
       {/* ── EVOLUÇÃO ── */}
       {view==="stats"&&<div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
         {sorted.length<2&&<div style={{textAlign:"center",padding:"56px 0",
-          color:"rgba(255,255,255,.2)",fontSize:"14px",lineHeight:1.8}}>
-          Registre pelo menos 2 dias<br/>para ver a evolução.</div>}
+          color:TEXT2,fontSize:"14px",lineHeight:1.8}}>
+          Registre pelo menos 2 dias<br/>para ver a evolução.
+        </div>}
 
         {sorted.length>=2&&<>
-          {markersInLast7.length>0&&<div style={{...card,background:"rgba(250,210,80,.05)",
-            border:"1px solid rgba(250,210,80,.15)",display:"flex",alignItems:"center",gap:"10px"}}>
-            <div style={{width:"22px",height:"0",borderTop:"2px dashed rgba(250,210,80,.5)",flexShrink:0}}/>
-            <span style={{fontSize:"12px",color:"rgba(250,210,80,.7)"}}>
-              Linha tracejada = ajuste de dose registrado
-            </span>
+          {markersInLast7.length>0&&<div style={{...card,background:`${WARNING}08`,
+            border:`1px solid ${WARNING}30`,display:"flex",alignItems:"center",gap:"10px"}}>
+            <div style={{width:"22px",height:"0",borderTop:`2px dashed ${WARNING}80`,flexShrink:0}}/>
+            <span style={{fontSize:"12px",color:WARNING}}>Linha tracejada = ajuste de dose</span>
           </div>}
 
           {/* Barra geral */}
-          <div style={{...card,background:"rgba(100,181,246,.05)",border:"1px solid rgba(100,181,246,.12)"}}>
-            <div style={{fontSize:"10px",color:"rgba(255,255,255,.3)",textTransform:"uppercase",
+          <div style={{...card}}>
+            <div style={{fontSize:"10px",color:TEXT2,textTransform:"uppercase",
               letterSpacing:".1em",marginBottom:"12px",fontWeight:"600"}}>
               Média geral · últimos {last7.length} dias
             </div>
@@ -576,10 +609,10 @@ function App(){
                 const isDose=allDoseMarkers.includes(date);
                 return<div key={date} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"4px"}}>
                   <div style={{width:"100%",height:`${h}px`,borderRadius:"4px 4px 2px 2px",
-                    background:C[Math.round(avg)],opacity:.8,
-                    outline:isDose?"2px solid rgba(250,210,80,.6)":""}}/>
+                    background:C[Math.round(avg)],opacity:.85,
+                    outline:isDose?`2px solid ${WARNING}`:""}}/>
                   <div style={{fontSize:"9px",
-                    color:isDose?"rgba(250,210,80,.7)":"rgba(255,255,255,.25)",
+                    color:isDose?WARNING:TEXT2,
                     fontWeight:isDose?"700":"400"}}>{fmtS(date)}</div>
                 </div>;
               })}
@@ -596,15 +629,14 @@ function App(){
                 <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
                   <span style={{fontSize:"18px"}}>{dim.icon}</span>
                   <div>
-                    <div style={{fontSize:"13px",fontWeight:"600"}}>{dim.label}</div>
-                    <div style={{fontSize:"10px",color:avg?C[an]:"rgba(255,255,255,.2)",
-                      fontWeight:"600",marginTop:"2px"}}>
+                    <div style={{fontSize:"13px",fontWeight:"600",color:TEXT}}>{dim.label}</div>
+                    <div style={{fontSize:"10px",color:avg?C[an]:TEXT2,fontWeight:"600",marginTop:"2px"}}>
                       Média {avg||"--"} · {last7.length} dias
                     </div>
                   </div>
                 </div>
-                <span style={{fontFamily:"Syne",fontSize:"22px",fontWeight:"800",
-                  color:avg?C[an]:"rgba(255,255,255,.15)"}}>{avg||"--"}</span>
+                <span style={{fontSize:"22px",fontWeight:"800",
+                  color:avg?C[an]:TEXT2}}>{avg||"--"}</span>
               </div>
               {data.length>=2&&<TrendLine data={data} color={C[an]||ACCENT}
                 markers={markersInLast7} dates={last7}/>}
