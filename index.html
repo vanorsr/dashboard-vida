@@ -43,8 +43,8 @@ const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJ
 const supaH={"apikey":SUPA_KEY,"Authorization":`Bearer ${SUPA_KEY}`,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"};
 const supaG={"apikey":SUPA_KEY,"Authorization":`Bearer ${SUPA_KEY}`};
 
-function entryToRow(date,e){return{data:date,foco:e.foco||null,sono:e.sono||null,humor:e.humor||null,emocao:e.emocao||null,alcool:e.alcool||null,movimento:e.movimento||null,financas:e.financas||null,nota_foco:e.n_foco||null,nota_sono:e.n_sono||null,nota_humor:e.n_humor||null,nota_emocao:e.n_emocao||null,nota_alcool:e.n_alcool||null,nota_movimento:e.n_movimento||null,nota_financas:e.n_financas||null}}
-function rowToEntry(r){return{foco:r.foco,sono:r.sono,humor:r.humor,emocao:r.emocao,alcool:r.alcool,movimento:r.movimento,financas:r.financas,n_foco:r.nota_foco,n_sono:r.nota_sono,n_humor:r.nota_humor,n_emocao:r.nota_emocao,n_alcool:r.nota_alcool,n_movimento:r.nota_movimento,n_financas:r.nota_financas}}
+function entryToRow(date,e){return{data:date,foco:e.foco||null,sono:e.sono||null,humor:e.humor||null,emocao:e.emocao||null,alcool:e.alcool||null,movimento:e.movimento||null,financas:e.financas||null,ansiedade:e.ansiedade||null,procrast:e.procrast||null,produtiv:e.produtiv||null,nota_foco:e.n_foco||null,nota_sono:e.n_sono||null,nota_humor:e.n_humor||null,nota_emocao:e.n_emocao||null,nota_alcool:e.n_alcool||null,nota_movimento:e.n_movimento||null,nota_financas:e.n_financas||null,nota_ansiedade:e.n_ansiedade||null,nota_procrast:e.n_procrast||null,nota_produtiv:e.n_produtiv||null}}
+function rowToEntry(r){return{foco:r.foco,sono:r.sono,humor:r.humor,emocao:r.emocao,alcool:r.alcool,movimento:r.movimento,financas:r.financas,ansiedade:r.ansiedade,procrast:r.procrast,produtiv:r.produtiv,n_foco:r.nota_foco,n_sono:r.nota_sono,n_humor:r.nota_humor,n_emocao:r.nota_emocao,n_alcool:r.nota_alcool,n_movimento:r.nota_movimento,n_financas:r.nota_financas,n_ansiedade:r.nota_ansiedade,n_procrast:r.nota_procrast,n_produtiv:r.nota_produtiv}}
 async function sbFetchEntries(){const r=await fetch(`${SUPA_URL}/rest/v1/dvida_registros?select=*`,{headers:supaG});if(!r.ok)throw new Error();const rows=await r.json();const out={};rows.forEach(row=>{out[row.data]=rowToEntry(row)});return out}
 async function sbUpsertEntry(date,entry){const r=await fetch(`${SUPA_URL}/rest/v1/dvida_registros`,{method:"POST",headers:supaH,body:JSON.stringify(entryToRow(date,entry))});if(!r.ok)throw new Error()}
 async function sbFetchMeds(){const r=await fetch(`${SUPA_URL}/rest/v1/dvida_medicamentos?select=*`,{headers:supaG});if(!r.ok)throw new Error();const rows=await r.json();return rows.map(r=>r.dados)}
@@ -65,7 +65,10 @@ const DIMS=[
   {id:"emocao",   icon:"🌊",label:"Regulação Emocional",     desc:["Sem controle","Difícil","Regular","Controlado","Equilibrado"],a1:"Reagi de forma exagerada",a5:"Mantive calma, sem impulsividade"},
   {id:"alcool",   icon:"🍺",label:"Sem Álcool",              desc:["Alto consumo","Consumo","Moderado","Pouco","Nenhum"],a1:"Consumo além do pretendido",a5:"Nenhum consumo"},
   {id:"movimento",icon:"🏃",label:"Atividade Física",        desc:["Sedentário","Quase nada","Leve","Ativo","Muito ativo"],a1:"Sedentário o dia todo",a5:"30min+ de atividade intencional"},
-  {id:"financas", icon:"💰",label:"Controle Financeiro",     desc:["Sem controle","Difícil","Regular","Controlado","Excelente"],a1:"Compra por impulso ou conta esquecida",a5:"Nenhum gasto impulsivo"},
+  {id:"financas",    icon:"💰",label:"Controle Financeiro",      desc:["Sem controle","Difícil","Regular","Controlado","Excelente"],a1:"Compra por impulso ou conta esquecida",a5:"Nenhum gasto impulsivo"},
+  {id:"ansiedade",   icon:"🧘",label:"Ansiedade",               desc:["Intensa","Alta","Moderada","Leve","Calmo"],a1:"Ansiedade intensa o dia todo, difícil de controlar",a5:"Calmo e tranquilo, sem episódios de ansiedade"},
+  {id:"procrast",    icon:"⏳",label:"Procrastinação",           desc:["Evitei tudo","Muita resistência","Regular","Pouca resistência","Executei tudo"],a1:"Evitei tudo que precisava fazer, resistência total",a5:"Executei as tarefas sem resistência significativa"},
+  {id:"produtiv",    icon:"💼",label:"Produtividade no Trabalho",desc:["Improdutivo","Pouco produtivo","Regular","Produtivo","Alta entrega"],a1:"Dia improdutivo, nada relevante entregue",a5:"Dia de alta entrega, metas atingidas"},
 ];
 
 const today=()=>new Date().toISOString().split("T")[0];
