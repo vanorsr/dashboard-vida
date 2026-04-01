@@ -125,7 +125,7 @@ function PinScreen({onUnlock}){
       if(n.length===4){n===stored?(sessionStorage.setItem(SES_KEY,"1"),onUnlock()):err_()}
     } else {
       if(step===1){const n=pin+d;setPin(n);if(n.length===4)setStep(2)}
-      else{const n=conf+d;setConf(n);if(n.length===4){n===pin?(persist(PIN_KEY,pin),sessionStorage.setItem(SES_KEY,"1"),onUnlock()):err_()}}
+      else{const n=conf+d;setConf(n);if(n.length===4){n===pin?(localStorage.setItem(PIN_KEY,pin),sessionStorage.setItem(SES_KEY,"1"),onUnlock()):err_()}}
     }
   };
   const del=()=>{if(!isFirst||step===1)setPin(p=>p.slice(0,-1));else setConf(p=>p.slice(0,-1))};
@@ -358,10 +358,13 @@ function App(){
   const allFilled=DIMS.every(d=>draft[d.id]>0);
 
   const handleSave=()=>{
-    if(!allFilled)return;setSaving(true);
+    if(!allFilled)return;
+    setSaving(true);
     const u={...entries,[today()]:draft};
-    persist(DATA_KEY,u);setEntries(u);setSaved(true);
-    setTimeout(()=>{setSaved(false);setSaving(false);setView("history")},1300);
+    persist(DATA_KEY,u);
+    setEntries(u);
+    setSaved(true);
+    setTimeout(()=>{setSaved(false);setSaving(false);setView("history");},1600);
   };
 
   const sorted=Object.keys(entries).sort();
