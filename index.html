@@ -6,6 +6,14 @@
 <meta name="theme-color" content="#0F172A"/>
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent"/>
+<meta name="apple-mobile-web-app-title" content="DashVida"/>
+<meta name="description" content="Acompanhamento de tratamento TDAH"/>
+<meta name="mobile-web-app-capable" content="yes"/>
+<!-- iOS icons -->
+<link rel="apple-touch-icon" sizes="192x192" href="icon-192.png"/>
+<link rel="apple-touch-icon" sizes="512x512" href="icon-512.png"/>
+<!-- PWA Manifest -->
+<link rel="manifest" href="manifest.json"/>
 <title>Dashboard da Vida</title>
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;500;600;700;800&display=swap" rel="stylesheet"/>
@@ -23,10 +31,12 @@ input[type=date]::-webkit-calendar-picker-indicator{filter:invert(.5)}
 @keyframes fadeUp{from{opacity:0;transform:translateY(12px)}to{opacity:1;transform:translateY(0)}}
 @keyframes shake{0%,100%{transform:translateX(0)}20%,60%{transform:translateX(-8px)}40%,80%{transform:translateX(8px)}}
 @keyframes slideIn{from{opacity:0;transform:translateY(24px)}to{opacity:1;transform:translateY(0)}}
+@keyframes slideUp{from{opacity:0;transform:translateY(80px)}to{opacity:1;transform:translateY(0)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 .fa{animation:fadeUp .3s ease both}
 .shake{animation:shake .4s ease}
 .si{animation:slideIn .3s ease both}
+.slide-up{animation:slideUp .4s ease both}
 .spin{animation:spin 1s linear infinite;display:inline-block}
 button{cursor:pointer;border:none;outline:none;transition:opacity .15s}
 button:active{opacity:.75}
@@ -34,15 +44,46 @@ button:active{opacity:.75}
 </head>
 <body>
 <div id="root"></div>
+<div id="install-banner"></div>
+
+<script>
+// ── Service Worker
+if("serviceWorker" in navigator){
+  window.addEventListener("load", ()=>{
+    navigator.serviceWorker.register("/sw.js")
+      .then(r=>console.log("SW registrado:", r.scope))
+      .catch(e=>console.log("SW erro:", e));
+  });
+}
+
+// ── Install prompt
+let deferredPrompt = null;
+window.addEventListener("beforeinstallprompt", e=>{
+  e.preventDefault();
+  deferredPrompt = e;
+  window.__showInstallBanner && window.__showInstallBanner();
+});
+window.addEventListener("appinstalled", ()=>{
+  deferredPrompt = null;
+  window.__hideInstallBanner && window.__hideInstallBanner();
+});
+
+window.__triggerInstall = async ()=>{
+  if(!deferredPrompt)return;
+  deferredPrompt.prompt();
+  const{outcome} = await deferredPrompt.userChoice;
+  if(outcome==="accepted") deferredPrompt = null;
+};
+</script>
+
 <script type="text/babel">
-const {useState,useEffect,useMemo}=React;
+const {useState,useEffect,useMemo,useCallback}=React;
 
 // ── Supabase
 const SUPA_URL="https://kyblsjyzlvawxinzaakf.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt5Ymxzanl6bHZhd3hpbnphYWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMjQ4MTksImV4cCI6MjA5MDYwMDgxOX0.h12Sjfqqix3orJjj-p-_ywl9uefHIhEt-0GmKRsncpg";
 const supaH={"apikey":SUPA_KEY,"Authorization":`Bearer ${SUPA_KEY}`,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"};
 const supaG={"apikey":SUPA_KEY,"Authorization":`Bearer ${SUPA_KEY}`};
-
 function entryToRow(date,e){return{data:date,foco:e.foco||null,sono:e.sono||null,humor:e.humor||null,emocao:e.emocao||null,alcool:e.alcool||null,movimento:e.movimento||null,financas:e.financas||null,ansiedade:e.ansiedade||null,procrast:e.procrast||null,produtiv:e.produtiv||null,nota_foco:e.n_foco||null,nota_sono:e.n_sono||null,nota_humor:e.n_humor||null,nota_emocao:e.n_emocao||null,nota_alcool:e.n_alcool||null,nota_movimento:e.n_movimento||null,nota_financas:e.n_financas||null,nota_ansiedade:e.n_ansiedade||null,nota_procrast:e.n_procrast||null,nota_produtiv:e.n_produtiv||null}}
 function rowToEntry(r){return{foco:r.foco,sono:r.sono,humor:r.humor,emocao:r.emocao,alcool:r.alcool,movimento:r.movimento,financas:r.financas,ansiedade:r.ansiedade,procrast:r.procrast,produtiv:r.produtiv,n_foco:r.nota_foco,n_sono:r.nota_sono,n_humor:r.nota_humor,n_emocao:r.nota_emocao,n_alcool:r.nota_alcool,n_movimento:r.nota_movimento,n_financas:r.nota_financas,n_ansiedade:r.nota_ansiedade,n_procrast:r.nota_procrast,n_produtiv:r.nota_produtiv}}
 async function sbFetchEntries(){const r=await fetch(`${SUPA_URL}/rest/v1/dvida_registros?select=*`,{headers:supaG});if(!r.ok)throw new Error();const rows=await r.json();const out={};rows.forEach(row=>{out[row.data]=rowToEntry(row)});return out}
@@ -51,7 +92,7 @@ async function sbFetchMeds(){const r=await fetch(`${SUPA_URL}/rest/v1/dvida_medi
 async function sbUpsertMed(med){await fetch(`${SUPA_URL}/rest/v1/dvida_medicamentos`,{method:"POST",headers:supaH,body:JSON.stringify({id:med.id,dados:med})})}
 async function sbDeleteMed(id){await fetch(`${SUPA_URL}/rest/v1/dvida_medicamentos?id=eq.${id}`,{method:"DELETE",headers:supaH})}
 
-// ── Keys & Palette
+// ── Palette & Constants
 const PIN_KEY="dvida_pin",DATA_KEY="dvida_entries",MED_KEY="dvida_meds",SES_KEY="dvida_session";
 const BG="#0F172A",SURFACE="#1E293B",SURFACE2="#263348";
 const ACCENT="#60A5FA",SUCCESS="#10B981",DANGER="#F87171",WARNING="#FBBF24";
@@ -59,16 +100,16 @@ const TEXT="#F1F5F9",TEXT2="#94A3B8",BORDER="rgba(96,165,250,0.15)";
 const C={1:DANGER,2:"#FB923C",3:WARNING,4:"#4ADE80",5:SUCCESS};
 
 const DIMS=[
-  {id:"foco",     icon:"🎯",label:"Foco & Produtividade",   desc:["Muito disperso","Disperso","Regular","Focado","Muito focado"],a1:"Não consegui concluir nada, mente dispersa",a5:"Foco em blocos longos, concluí o que planejei"},
-  {id:"sono",     icon:"🌙",label:"Qualidade do Sono",       desc:["Péssimo","Ruim","Regular","Bom","Ótimo"],a1:"Acordei 3x+, menos de 5h, arrastado",a5:"7h+ contínuas, acordei disposto"},
-  {id:"humor",    icon:"☀️",label:"Humor & Bem-estar",       desc:["Muito mal","Mal","Regular","Bem","Muito bem"],a1:"Abatido, sem energia",a5:"Animado, energia estável"},
-  {id:"emocao",   icon:"🌊",label:"Regulação Emocional",     desc:["Sem controle","Difícil","Regular","Controlado","Equilibrado"],a1:"Reagi de forma exagerada",a5:"Mantive calma, sem impulsividade"},
-  {id:"alcool",   icon:"🍺",label:"Sem Álcool",              desc:["Alto consumo","Consumo","Moderado","Pouco","Nenhum"],a1:"Consumo além do pretendido",a5:"Nenhum consumo"},
-  {id:"movimento",icon:"🏃",label:"Atividade Física",        desc:["Sedentário","Quase nada","Leve","Ativo","Muito ativo"],a1:"Sedentário o dia todo",a5:"30min+ de atividade intencional"},
-  {id:"financas",    icon:"💰",label:"Controle Financeiro",      desc:["Sem controle","Difícil","Regular","Controlado","Excelente"],a1:"Compra por impulso ou conta esquecida",a5:"Nenhum gasto impulsivo"},
-  {id:"ansiedade",   icon:"🧘",label:"Ansiedade",               desc:["Intensa","Alta","Moderada","Leve","Calmo"],a1:"Ansiedade intensa o dia todo, difícil de controlar",a5:"Calmo e tranquilo, sem episódios de ansiedade"},
-  {id:"procrast",    icon:"⏳",label:"Procrastinação",           desc:["Evitei tudo","Muita resistência","Regular","Pouca resistência","Executei tudo"],a1:"Evitei tudo que precisava fazer, resistência total",a5:"Executei as tarefas sem resistência significativa"},
-  {id:"produtiv",    icon:"💼",label:"Produtividade no Trabalho",desc:["Improdutivo","Pouco produtivo","Regular","Produtivo","Alta entrega"],a1:"Dia improdutivo, nada relevante entregue",a5:"Dia de alta entrega, metas atingidas"},
+  {id:"foco",      icon:"🎯",label:"Foco & Produtividade",        desc:["Muito disperso","Disperso","Regular","Focado","Muito focado"],a1:"Não consegui concluir nada, mente dispersa",a5:"Foco em blocos longos, concluí o que planejei"},
+  {id:"sono",      icon:"🌙",label:"Qualidade do Sono",            desc:["Péssimo","Ruim","Regular","Bom","Ótimo"],a1:"Acordei 3x+, menos de 5h, arrastado",a5:"7h+ contínuas, acordei disposto"},
+  {id:"humor",     icon:"☀️",label:"Humor & Bem-estar",            desc:["Muito mal","Mal","Regular","Bem","Muito bem"],a1:"Abatido, sem energia",a5:"Animado, energia estável"},
+  {id:"emocao",    icon:"🌊",label:"Regulação Emocional",          desc:["Sem controle","Difícil","Regular","Controlado","Equilibrado"],a1:"Reagi de forma exagerada",a5:"Mantive calma, sem impulsividade"},
+  {id:"alcool",    icon:"🍺",label:"Sem Álcool",                   desc:["Alto consumo","Consumo","Moderado","Pouco","Nenhum"],a1:"Consumo além do pretendido",a5:"Nenhum consumo"},
+  {id:"movimento", icon:"🏃",label:"Atividade Física",             desc:["Sedentário","Quase nada","Leve","Ativo","Muito ativo"],a1:"Sedentário o dia todo",a5:"30min+ de atividade intencional"},
+  {id:"financas",  icon:"💰",label:"Controle Financeiro",          desc:["Sem controle","Difícil","Regular","Controlado","Excelente"],a1:"Compra por impulso ou conta esquecida",a5:"Nenhum gasto impulsivo"},
+  {id:"ansiedade", icon:"🧘",label:"Ansiedade",                    desc:["Intensa","Alta","Moderada","Leve","Calmo"],a1:"Ansiedade intensa o dia todo, difícil de controlar",a5:"Calmo e tranquilo, sem episódios de ansiedade"},
+  {id:"procrast",  icon:"⏳",label:"Procrastinação",               desc:["Evitei tudo","Muita resistência","Regular","Pouca resistência","Executei tudo"],a1:"Evitei tudo que precisava fazer, resistência total",a5:"Executei as tarefas sem resistência significativa"},
+  {id:"produtiv",  icon:"💼",label:"Produtividade no Trabalho",    desc:["Improdutivo","Pouco produtivo","Regular","Produtivo","Alta entrega"],a1:"Dia improdutivo, nada relevante entregue",a5:"Dia de alta entrega, metas atingidas"},
 ];
 
 const today=()=>new Date().toISOString().split("T")[0];
@@ -76,29 +117,53 @@ const fmtS=d=>{const[,m,dd]=d.split("-");return`${dd}/${m}`};
 const fmtF=d=>new Date(d+"T12:00:00").toLocaleDateString("pt-BR",{weekday:"short",day:"numeric",month:"short"});
 const uid=()=>Math.random().toString(36).slice(2,10);
 const brl=v=>Number(v).toLocaleString("pt-BR",{style:"currency",currency:"BRL"});
-const avg=e=>e?+(DIMS.reduce((s,d)=>s+(e[d.id]||0),0)/DIMS.length).toFixed(1):null;
+const avg=e=>e?+(DIMS.reduce((s,d)=>s+(e[d.id]||0),0)/DIMS.filter(d=>e[d.id]).length||0).toFixed(1):null;
 const loadJ=(k,d)=>{try{return JSON.parse(localStorage.getItem(k))||d}catch{return d}};
 const persist=(k,v)=>localStorage.setItem(k,JSON.stringify(v));
 function doseAt(med,date){return[...med.doses].sort((a,b)=>a.data>b.data?1:-1).filter(d=>d.data<=date).slice(-1)[0]||null}
 function medsAt(meds,date){return meds.filter(m=>m.dataInicio<=date&&(!m.dataFim||m.dataFim>=date))}
 function weekKey(date){const d=new Date(date+"T12:00:00");const j=new Date(d.getFullYear(),0,1);const w=Math.ceil(((d-j)/86400000+j.getDay()+1)/7);return`${d.getFullYear()}-W${String(w).padStart(2,"0")}`}
-
-function exportCSV(entries){
-  const cols=DIMS.map(d=>d.id);
-  const hdr=["data",...cols,...cols.map(c=>`nota_${c}`),"media_geral"];
-  const rows=Object.keys(entries).sort().map(date=>{
-    const e=entries[date];const sc=cols.map(c=>e[c]||"");
-    const nt=cols.map(c=>`"${(e[`n_${c}`]||"").replace(/"/g,'""')}"`);
-    const av=sc.filter(Boolean).length?(sc.filter(Boolean).reduce((a,b)=>a+Number(b),0)/sc.filter(Boolean).length).toFixed(2):"";
-    return[date,...sc,...nt,av].join(",");
-  });
-  const url=URL.createObjectURL(new Blob([[hdr.join(","),...rows].join("\n")],{type:"text/csv"}));
-  Object.assign(document.createElement("a"),{href:url,download:"dashboard_vida.csv"}).click();
-  URL.revokeObjectURL(url);
-}
+function exportCSV(entries){const cols=DIMS.map(d=>d.id);const hdr=["data",...cols,...cols.map(c=>`nota_${c}`),"media_geral"];const rows=Object.keys(entries).sort().map(date=>{const e=entries[date];const sc=cols.map(c=>e[c]||"");const nt=cols.map(c=>`"${(e[`n_${c}`]||"").replace(/"/g,'""')}"`);const fil=sc.filter(Boolean);const av=fil.length?(fil.reduce((a,b)=>a+Number(b),0)/fil.length).toFixed(2):"";return[date,...sc,...nt,av].join(",")});const url=URL.createObjectURL(new Blob([[hdr.join(","),...rows].join("\n")],{type:"text/csv"}));Object.assign(document.createElement("a"),{href:url,download:"dashboard_vida.csv"}).click();URL.revokeObjectURL(url)}
 
 const card={background:SURFACE2,border:`1px solid ${BORDER}`,borderRadius:"12px",padding:"16px",boxShadow:"0 4px 12px rgba(0,0,0,0.15)"};
 const inp={width:"100%",background:SURFACE,border:`1px solid rgba(96,165,250,0.25)`,borderRadius:"8px",padding:"10px 14px",color:TEXT,fontSize:"14px",outline:"none"};
+
+// ── Install Banner ────────────────────────────────────────────────────────
+function InstallBanner(){
+  const[show,setShow]=useState(false);
+  const[dismissed,setDismissed]=useState(()=>!!localStorage.getItem("dvida_install_dismissed"));
+
+  useEffect(()=>{
+    window.__showInstallBanner=()=>{ if(!dismissed) setShow(true); };
+    window.__hideInstallBanner=()=>setShow(false);
+    return()=>{ delete window.__showInstallBanner; delete window.__hideInstallBanner; };
+  },[dismissed]);
+
+  const dismiss=()=>{ setShow(false); setDismissed(true); localStorage.setItem("dvida_install_dismissed","1"); };
+  const install=()=>{ window.__triggerInstall && window.__triggerInstall(); setShow(false); };
+
+  if(!show)return null;
+  return ReactDOM.createPortal(
+    <div className="slide-up" style={{position:"fixed",bottom:0,left:0,right:0,zIndex:200,padding:"0 0 env(safe-area-inset-bottom,0) 0"}}>
+      <div style={{background:"#1E293B",borderTop:`1px solid ${BORDER}`,borderRadius:"20px 20px 0 0",padding:"20px",margin:"0 auto",maxWidth:"430px",boxShadow:"0 -8px 32px rgba(0,0,0,0.4)"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"14px",marginBottom:"16px"}}>
+          <img src="icon-192.png" alt="icon" style={{width:"52px",height:"52px",borderRadius:"12px",flexShrink:0}}/>
+          <div>
+            <div style={{fontSize:"15px",fontWeight:"700",color:TEXT}}>Dashboard da Vida</div>
+            <div style={{fontSize:"12px",color:TEXT2,marginTop:"2px"}}>Instale na tela inicial para acesso rápido e uso offline</div>
+          </div>
+        </div>
+        <div style={{display:"flex",gap:"10px"}}>
+          <button onClick={dismiss} style={{flex:1,padding:"11px",borderRadius:"8px",background:SURFACE,border:`1px solid ${BORDER}`,color:TEXT2,fontSize:"13px",fontWeight:"500",fontFamily:"inherit"}}>Agora não</button>
+          <button onClick={install} style={{flex:2,padding:"11px",borderRadius:"8px",background:ACCENT,border:"none",color:"#fff",fontSize:"13px",fontWeight:"700",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:"6px"}}>
+            <span>⬇</span> Instalar app
+          </button>
+        </div>
+      </div>
+    </div>,
+    document.getElementById("install-banner")
+  );
+}
 
 // ── SyncBadge
 function SyncBadge({status}){
@@ -109,23 +174,13 @@ function SyncBadge({status}){
 }
 
 function MiniBar({value}){
-  return<div style={{display:"flex",gap:"2px"}}>
-    {[1,2,3,4,5].map(n=><div key={n} style={{width:"8px",height:"8px",borderRadius:"2px",background:n<=value?C[value]:"rgba(255,255,255,0.1)"}}/>)}
-  </div>;
+  return<div style={{display:"flex",gap:"2px"}}>{[1,2,3,4,5].map(n=><div key={n} style={{width:"8px",height:"8px",borderRadius:"2px",background:n<=value?C[value]:"rgba(255,255,255,0.1)"}}/>)}</div>;
 }
 
 function TrendLine({data,color,markers=[],dates=[]}){
   if(data.length<2)return null;
-  const w=260,h=50,p=4;
-  const xs=data.map((_,i)=>p+(i/(data.length-1))*(w-2*p));
-  const ys=data.map(v=>h-p-((v-1)/4)*(h-2*p));
-  const path=xs.map((x,i)=>`${i?"L":"M"}${x},${ys[i]}`).join(" ");
-  const mxs=markers.map(d=>{const i=dates.indexOf(d);return i>=0?p+(i/(data.length-1))*(w-2*p):null}).filter(x=>x!==null);
-  return<svg width={w} height={h} style={{overflow:"visible",display:"block"}}>
-    {mxs.map((x,i)=><line key={i} x1={x} y1={-4} x2={x} y2={h+4} stroke={`${WARNING}88`} strokeWidth="1.5" strokeDasharray="4,3"/>)}
-    <path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity=".9"/>
-    <circle cx={xs[xs.length-1]} cy={ys[ys.length-1]} r="3.5" fill={color}/>
-  </svg>;
+  const w=260,h=50,p=4;const xs=data.map((_,i)=>p+(i/(data.length-1))*(w-2*p));const ys=data.map(v=>h-p-((v-1)/4)*(h-2*p));const path=xs.map((x,i)=>`${i?"L":"M"}${x},${ys[i]}`).join(" ");const mxs=markers.map(d=>{const i=dates.indexOf(d);return i>=0?p+(i/(data.length-1))*(w-2*p):null}).filter(x=>x!==null);
+  return<svg width={w} height={h} style={{overflow:"visible",display:"block"}}>{mxs.map((x,i)=><line key={i} x1={x} y1={-4} x2={x} y2={h+4} stroke={`${WARNING}88`} strokeWidth="1.5" strokeDasharray="4,3"/>)}<path d={path} fill="none" stroke={color} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity=".9"/><circle cx={xs[xs.length-1]} cy={ys[ys.length-1]} r="3.5" fill={color}/></svg>;
 }
 
 // ── PIN
@@ -138,7 +193,7 @@ function PinScreen({onUnlock}){
   const lbl=!isFirst?"Digite seu PIN":step===1?"Crie um PIN de 4 dígitos":"Confirme o PIN";
   return<div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 20px",background:BG}}>
     <div className="fa" style={{textAlign:"center",marginBottom:"44px"}}>
-      <div style={{fontSize:"38px",marginBottom:"12px"}}>🧠</div>
+      <img src="icon-192.png" alt="icon" style={{width:"72px",height:"72px",borderRadius:"18px",marginBottom:"16px"}}/>
       <div style={{fontSize:"22px",fontWeight:"800",color:TEXT}}>Dashboard da Vida</div>
       <div style={{fontSize:"13px",color:TEXT2,marginTop:"6px"}}>{lbl}</div>
     </div>
@@ -146,8 +201,7 @@ function PinScreen({onUnlock}){
       {[0,1,2,3].map(i=><div key={i} style={{width:"14px",height:"14px",borderRadius:"50%",background:i<cur.length?(err?DANGER:ACCENT):"rgba(255,255,255,.15)",transition:"background .15s"}}/>)}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"repeat(3,72px)",gap:"12px"}}>
-      {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((k,i)=><button key={i} onClick={()=>{if(k==="⌫")del();else if(k!=="")digit(String(k))}}
-        style={{height:"64px",borderRadius:"8px",fontSize:k==="⌫"?"20px":"22px",fontWeight:"600",background:k===""?"transparent":SURFACE2,color:k==="⌫"?TEXT2:TEXT,border:`1px solid ${k===""?"transparent":BORDER}`,cursor:k===""?"default":"pointer"}}>{k}</button>)}
+      {[1,2,3,4,5,6,7,8,9,"",0,"⌫"].map((k,i)=><button key={i} onClick={()=>{if(k==="⌫")del();else if(k!=="")digit(String(k))}} style={{height:"64px",borderRadius:"8px",fontSize:k==="⌫"?"20px":"22px",fontWeight:"600",background:k===""?"transparent":SURFACE2,color:k==="⌫"?TEXT2:TEXT,border:`1px solid ${k===""?"transparent":BORDER}`,cursor:k===""?"default":"pointer"}}>{k}</button>)}
     </div>
     {!isFirst&&<div style={{marginTop:"28px",fontSize:"12px",color:TEXT2}}>Esqueceu o PIN? Limpe os dados do site para redefinir.</div>}
   </div>;
@@ -173,252 +227,21 @@ function Field({label,hint,children}){
   </div>;
 }
 
-// ── Correlação ─────────────────────────────────────────────────────────────
-function DualAxisChart({datePoints}){
-  // datePoints: [{date, score, dose}]
-  if(datePoints.length<2)return null;
-  const W=300,H=130,PL=36,PR=36,PT=12,PB=28;
-  const cW=W-PL-PR,cH=H-PT-PB;
-
-  const scores=datePoints.map(p=>p.score);
-  const doses=datePoints.map(p=>p.dose);
-  const minDose=Math.min(...doses),maxDose=Math.max(...doses);
-  const doseRange=maxDose-minDose||1;
-
-  const xs=datePoints.map((_,i)=>PL+(i/(datePoints.length-1))*cW);
-  const scoreY=s=>PT+cH-((s-1)/4)*cH;
-  const doseY=d=>PT+cH-((d-minDose)/doseRange)*cH;
-
-  // Score path
-  const scorePath=xs.map((x,i)=>`${i?"L":"M"}${x},${scoreY(scores[i])}`).join(" ");
-
-  // Dose step path (step-after)
-  let dosePath="";
-  xs.forEach((x,i)=>{
-    const y=doseY(doses[i]);
-    if(i===0){dosePath+=`M${x},${y}`;}
-    else{
-      const prevY=doseY(doses[i-1]);
-      dosePath+=`L${x},${prevY}L${x},${y}`;
-    }
-  });
-
-  // Dose change markers
-  const doseChanges=datePoints.filter((p,i)=>i>0&&p.dose!==datePoints[i-1].dose);
-
-  // Y axis labels score
-  const scoreLabels=[1,2,3,4,5];
-  // Y axis labels dose
-  const doseLabels=minDose===maxDose?[minDose]:[minDose,maxDose];
-
-  return<svg width={W} height={H} style={{display:"block",overflow:"visible"}}>
-    {/* Grid */}
-    {scoreLabels.map(s=><line key={s} x1={PL} y1={scoreY(s)} x2={W-PR} y2={scoreY(s)} stroke="rgba(255,255,255,0.05)" strokeWidth="1"/>)}
-
-    {/* Dose change markers */}
-    {doseChanges.map((p,i)=>{
-      const idx=datePoints.indexOf(p);
-      const x=xs[idx];
-      return<g key={i}>
-        <line x1={x} y1={PT} x2={x} y2={PT+cH} stroke={`${WARNING}60`} strokeWidth="1.5" strokeDasharray="4,3"/>
-        <text x={x} y={PT-2} textAnchor="middle" fontSize="9" fill={WARNING}>{p.dose}mg</text>
-      </g>;
-    })}
-
-    {/* Dose line */}
-    <path d={dosePath} fill="none" stroke={WARNING} strokeWidth="1.5" opacity=".7" strokeLinejoin="round"/>
-    {/* Score line */}
-    <path d={scorePath} fill="none" stroke={ACCENT} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity=".9"/>
-
-    {/* Score dots */}
-    {xs.map((x,i)=><circle key={i} cx={x} cy={scoreY(scores[i])} r="3" fill={C[Math.round(scores[i])]}/>)}
-
-    {/* Left Y axis — Score */}
-    <text x={PL-4} y={scoreY(5)} textAnchor="end" fontSize="9" fill={ACCENT} dominantBaseline="middle">5</text>
-    <text x={PL-4} y={scoreY(3)} textAnchor="end" fontSize="9" fill={ACCENT} dominantBaseline="middle">3</text>
-    <text x={PL-4} y={scoreY(1)} textAnchor="end" fontSize="9" fill={ACCENT} dominantBaseline="middle">1</text>
-
-    {/* Right Y axis — Dose */}
-    {doseLabels.map((d,i)=><text key={i} x={W-PR+4} y={doseY(d)} textAnchor="start" fontSize="9" fill={WARNING} dominantBaseline="middle">{d}mg</text>)}
-
-    {/* X axis labels */}
-    {datePoints.map((p,i)=>{
-      if(datePoints.length<=7||i%(Math.ceil(datePoints.length/6))===0||i===datePoints.length-1)
-        return<text key={i} x={xs[i]} y={H-4} textAnchor="middle" fontSize="9" fill={TEXT2}>{fmtS(p.date)}</text>;
-      return null;
-    })}
-
-    {/* Axis lines */}
-    <line x1={PL} y1={PT} x2={PL} y2={PT+cH} stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
-    <line x1={PL} y1={PT+cH} x2={W-PR} y2={PT+cH} stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
-  </svg>;
-}
-
-function CorrelacaoTab({entries,meds}){
-  const activeMeds=meds.filter(m=>m.doses.length>0);
-  const[selMed,setSelMed]=useState(activeMeds[0]?.id||null);
-
-  const med=meds.find(m=>m.id===selMed);
-  const sortedDates=Object.keys(entries).sort();
-
-  // Pontos para o gráfico dual
-  const datePoints=useMemo(()=>{
-    if(!med)return[];
-    return sortedDates.map(date=>{
-      const e=entries[date];
-      const d=doseAt(med,date);
-      if(!e||!d)return null;
-      return{date,score:avg(e),dose:d.mg};
-    }).filter(Boolean);
-  },[med,entries,sortedDates]);
-
-  // Períodos por dose
-  const periods=useMemo(()=>{
-    if(!med)return[];
-    const dosesSort=[...med.doses].sort((a,b)=>a.data>b.data?1:-1);
-    return dosesSort.map((dose,i)=>{
-      const nextDose=dosesSort[i+1];
-      const datesInPeriod=sortedDates.filter(d=>
-        d>=dose.data&&entries[d]&&(!nextDose||d<nextDose.data)
-      );
-      if(!datesInPeriod.length)return null;
-      const dimAvgs=DIMS.map(dim=>{
-        const vals=datesInPeriod.map(d=>entries[d][dim.id]).filter(Boolean);
-        return vals.length?+(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1):null;
-      });
-      const overall=+(datesInPeriod.reduce((s,d)=>s+avg(entries[d]),0)/datesInPeriod.length).toFixed(1);
-      return{dose:dose.mg,startDate:dose.data,endDate:nextDose?.data||null,dates:datesInPeriod,dimAvgs,overall};
-    }).filter(Boolean);
-  },[med,entries,sortedDates]);
-
-  if(!med||activeMeds.length===0){
-    return<div style={{textAlign:"center",padding:"56px 20px",color:TEXT2,fontSize:"14px",lineHeight:1.8}}>
-      <div style={{fontSize:"32px",marginBottom:"12px"}}>💊</div>
-      Cadastre um medicamento com dose<br/>na aba Tratamento para ver a correlação.
-    </div>;
-  }
-
-  if(datePoints.length<2){
-    return<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-      {activeMeds.length>1&&<MedSelector meds={activeMeds} selMed={selMed} setSelMed={setSelMed}/>}
-      <div style={{textAlign:"center",padding:"56px 20px",color:TEXT2,fontSize:"14px",lineHeight:1.8}}>
-        <div style={{fontSize:"32px",marginBottom:"12px"}}>📈</div>
-        Registre pelo menos 2 dias<br/>para ver a correlação com a dose.
-      </div>
-    </div>;
-  }
-
-  return<div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
-
-    {/* Seletor de med */}
-    {activeMeds.length>1&&<div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-      {activeMeds.map(m=><button key={m.id} onClick={()=>setSelMed(m.id)} style={{
-        padding:"6px 14px",borderRadius:"8px",fontFamily:"inherit",
-        background:selMed===m.id?`${ACCENT}20`:SURFACE2,
-        border:`1px solid ${selMed===m.id?ACCENT:BORDER}`,
-        color:selMed===m.id?ACCENT:TEXT2,fontSize:"12px",fontWeight:selMed===m.id?"600":"400"}}>
-        {m.nome}
-      </button>)}
-    </div>}
-
-    {/* Gráfico dual */}
-    <div style={card}>
-      <div style={{fontSize:"12px",fontWeight:"600",color:TEXT,marginBottom:"4px"}}>Score × Dose — evolução temporal</div>
-      <div style={{fontSize:"11px",color:TEXT2,marginBottom:"14px"}}>
-        {med.nome} · {datePoints.length} dias registrados
-      </div>
-      <div style={{overflowX:"auto"}}>
-        <DualAxisChart datePoints={datePoints}/>
-      </div>
-      {/* Legenda */}
-      <div style={{display:"flex",gap:"16px",marginTop:"12px",paddingTop:"12px",borderTop:`1px solid ${BORDER}`}}>
-        <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-          <div style={{width:"20px",height:"2.5px",background:ACCENT,borderRadius:"2px"}}/>
-          <span style={{fontSize:"11px",color:TEXT2}}>Score médio (1–5)</span>
-        </div>
-        <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
-          <div style={{width:"20px",height:"0",borderTop:`2px solid ${WARNING}`,opacity:.7}}/>
-          <span style={{fontSize:"11px",color:TEXT2}}>Dose (mg)</span>
-        </div>
-      </div>
-    </div>
-
-    {/* Cards por período */}
-    <div style={{fontSize:"11px",color:TEXT2,textTransform:"uppercase",letterSpacing:".1em",fontWeight:"600",marginTop:"4px"}}>
-      Análise por período de dosagem
-    </div>
-
-    {periods.length===1&&<div style={{...card,background:`${ACCENT}08`,border:`1px solid ${ACCENT}20`}}>
-      <div style={{fontSize:"12px",color:TEXT2,lineHeight:1.6}}>
-        📊 Com mais dados e ajustes de dose, esta seção vai mostrar a comparação antes vs depois de cada mudança de dosagem.
-      </div>
-    </div>}
-
-    {[...periods].reverse().map((period,pi)=>{
-      const prev=periods[periods.length-2-pi];
-      return<div key={period.dose+period.startDate} className="fa" style={card}>
-        {/* Header do período */}
-        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"14px"}}>
-          <div>
-            <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
-              <span style={{fontSize:"15px",fontWeight:"700",color:WARNING}}>💊 {period.dose}mg</span>
-              {pi===0&&<span style={{fontSize:"10px",padding:"2px 8px",borderRadius:"20px",background:`${SUCCESS}20`,color:SUCCESS,fontWeight:"600"}}>Atual</span>}
-            </div>
-            <div style={{fontSize:"11px",color:TEXT2,marginTop:"3px"}}>
-              {fmtS(period.startDate)} → {period.endDate?fmtS(period.endDate):"hoje"} · {period.dates.length} dia{period.dates.length>1?"s":""}
-            </div>
-          </div>
-          <div style={{textAlign:"right"}}>
-            <div style={{fontSize:"22px",fontWeight:"800",color:C[Math.round(period.overall)]}}>{period.overall}</div>
-            {prev&&<div style={{fontSize:"11px",fontWeight:"600",
-              color:period.overall>prev.overall?SUCCESS:period.overall<prev.overall?DANGER:TEXT2}}>
-              {period.overall>prev.overall?"▲":period.overall<prev.overall?"▼":"="} {Math.abs(period.overall-prev.overall).toFixed(1)} vs {prev.dose}mg
-            </div>}
-          </div>
-        </div>
-
-        {/* Dimensões */}
-        <div style={{display:"flex",flexDirection:"column",gap:"7px"}}>
-          {DIMS.map((dim,di)=>{
-            const val=period.dimAvgs[di];
-            const prevVal=prev?.dimAvgs[di];
-            if(!val)return null;
-            const delta=prevVal?(val-prevVal).toFixed(1):null;
-            return<div key={dim.id} style={{display:"flex",alignItems:"center",gap:"8px"}}>
-              <span style={{fontSize:"13px",minWidth:"20px"}}>{dim.icon}</span>
-              <div style={{flex:1,height:"6px",borderRadius:"3px",background:SURFACE,overflow:"hidden"}}>
-                <div style={{height:"100%",width:`${(val/5)*100}%`,borderRadius:"3px",background:C[Math.round(val)],transition:"width .4s"}}/>
-              </div>
-              <span style={{fontSize:"12px",fontWeight:"700",color:C[Math.round(val)],minWidth:"24px",textAlign:"right"}}>{val}</span>
-              {delta!==null&&<span style={{fontSize:"10px",fontWeight:"600",minWidth:"32px",textAlign:"right",
-                color:parseFloat(delta)>0?SUCCESS:parseFloat(delta)<0?DANGER:TEXT2}}>
-                {parseFloat(delta)>0?"▲":parseFloat(delta)<0?"▼":"="}{Math.abs(delta)}
-              </span>}
-            </div>;
-          })}
-        </div>
-      </div>;
-    })}
-  </div>;
-}
-
-// ── History views
+// ── History Item
 function HistoryItem({date,entry,meds,allDoseMarkers}){
-  const[open,setOpen]=useState(false);const av=avg(entry);const hasN=DIMS.some(d=>entry[`n_${d.id}`]);const medsNoDia=medsAt(meds,date);const isDoseDay=allDoseMarkers.includes(date);
+  const[open,setOpen]=useState(false);
+  const filled=DIMS.filter(d=>entry[d.id]);
+  const av=filled.length?+(filled.reduce((s,d)=>s+entry[d.id],0)/filled.length).toFixed(1):null;
+  const hasN=DIMS.some(d=>entry[`n_${d.id}`]);const medsNoDia=medsAt(meds,date);const isDoseDay=allDoseMarkers.includes(date);
   return<div className="fa" style={{...card,border:isDoseDay?`1px solid ${WARNING}44`:`1px solid ${BORDER}`}}>
     {isDoseDay&&<div style={{fontSize:"11px",color:WARNING,marginBottom:"8px",display:"flex",alignItems:"center",gap:"6px"}}>⚡ Ajuste de dose neste dia</div>}
     <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"10px"}}>
       <div>
         <div style={{fontSize:"13px",fontWeight:"600",color:TEXT}}>{fmtF(date)}</div>
-        <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginTop:"4px"}}>
-          {medsNoDia.map(m=>{const d=doseAt(m,date);return<span key={m.id} style={{fontSize:"10px",padding:"2px 8px",borderRadius:"20px",background:`${ACCENT}15`,color:ACCENT}}>{m.nome}{d?` ${d.mg}mg`:""}</span>})}
-        </div>
+        <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginTop:"4px"}}>{medsNoDia.map(m=>{const d=doseAt(m,date);return<span key={m.id} style={{fontSize:"10px",padding:"2px 8px",borderRadius:"20px",background:`${ACCENT}15`,color:ACCENT}}>{m.nome}{d?` ${d.mg}mg`:""}</span>})}</div>
         {hasN&&<button onClick={()=>setOpen(p=>!p)} style={{background:"none",border:"none",padding:"2px 0 0",fontSize:"11px",color:`${ACCENT}99`,cursor:"pointer",fontFamily:"inherit"}}>{open?"▲ ocultar notas":"▼ ver notas"}</button>}
       </div>
-      <div style={{display:"flex",alignItems:"baseline",gap:"3px"}}>
-        <span style={{fontSize:"20px",fontWeight:"800",color:C[Math.round(av)]}}>{av}</span>
-        <span style={{fontSize:"11px",color:TEXT2}}>/5</span>
-      </div>
+      {av&&<div style={{display:"flex",alignItems:"baseline",gap:"3px"}}><span style={{fontSize:"20px",fontWeight:"800",color:C[Math.round(av)]}}>{av}</span><span style={{fontSize:"11px",color:TEXT2}}>/5</span></div>}
     </div>
     <div style={{display:"grid",gridTemplateColumns:"1fr 1fr",gap:"7px"}}>
       {DIMS.map(dim=><div key={dim.id} style={{display:"flex",alignItems:"center",gap:"6px"}}>
@@ -427,19 +250,18 @@ function HistoryItem({date,entry,meds,allDoseMarkers}){
       </div>)}
     </div>
     {open&&<div style={{marginTop:"12px",paddingTop:"12px",borderTop:`1px solid ${BORDER}`,display:"flex",flexDirection:"column",gap:"10px"}}>
-      {DIMS.filter(d=>entry[`n_${d.id}`]).map(dim=><div key={dim.id}>
-        <div style={{fontSize:"11px",color:TEXT2,marginBottom:"3px"}}>{dim.icon} {dim.label}</div>
-        <div style={{fontSize:"13px",color:TEXT,lineHeight:1.5,opacity:.85}}>{entry[`n_${dim.id}`]}</div>
-      </div>)}
+      {DIMS.filter(d=>entry[`n_${d.id}`]).map(dim=><div key={dim.id}><div style={{fontSize:"11px",color:TEXT2,marginBottom:"3px"}}>{dim.icon} {dim.label}</div><div style={{fontSize:"13px",color:TEXT,lineHeight:1.5,opacity:.85}}>{entry[`n_${dim.id}`]}</div></div>)}
     </div>}
   </div>;
 }
 
+// ── Heatmap
 function HeatmapView({entries}){
   const allDates=Object.keys(entries).sort();const[ym,setYm]=useState(today().slice(0,7));
   const months=useMemo(()=>{const s=new Set(allDates.map(d=>d.slice(0,7)));s.add(today().slice(0,7));return[...s].sort()},[entries]);
   const[year,month]=ym.split("-").map(Number);const firstDay=new Date(year,month-1,1).getDay();const daysInMonth=new Date(year,month,0).getDate();
   const cells=[];for(let i=0;i<firstDay;i++)cells.push(null);for(let d=1;d<=daysInMonth;d++)cells.push(String(d).padStart(2,"0"));
+  const avgE=e=>{const f=DIMS.filter(d=>e[d.id]);return f.length?+(f.reduce((s,d)=>s+e[d.id],0)/f.length).toFixed(1):null};
   return<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
     <div style={{...card,padding:"12px 16px"}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"14px"}}>
@@ -447,14 +269,12 @@ function HeatmapView({entries}){
         <div style={{fontSize:"14px",fontWeight:"600",color:TEXT,textTransform:"capitalize"}}>{new Date(year,month-1,1).toLocaleDateString("pt-BR",{month:"long",year:"numeric"})}</div>
         <button onClick={()=>{const i=months.indexOf(ym);if(i<months.length-1)setYm(months[i+1])}} disabled={months.indexOf(ym)===months.length-1} style={{background:SURFACE,border:`1px solid ${BORDER}`,borderRadius:"8px",padding:"6px 14px",color:TEXT,fontSize:"18px",fontFamily:"inherit"}}>›</button>
       </div>
-      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"3px",marginBottom:"4px"}}>
-        {["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map(d=><div key={d} style={{textAlign:"center",fontSize:"10px",color:TEXT2,fontWeight:"600",padding:"2px 0"}}>{d}</div>)}
-      </div>
+      <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"3px",marginBottom:"4px"}}>{["Dom","Seg","Ter","Qua","Qui","Sex","Sáb"].map(d=><div key={d} style={{textAlign:"center",fontSize:"10px",color:TEXT2,fontWeight:"600",padding:"2px 0"}}>{d}</div>)}</div>
       <div style={{display:"grid",gridTemplateColumns:"repeat(7,1fr)",gap:"3px"}}>
-        {cells.map((dd,i)=>{if(!dd)return<div key={i}/>;const dateStr=`${ym}-${dd}`;const e=entries[dateStr];const av=e?avg(e):null;const isToday=dateStr===today();const isFuture=dateStr>today();
+        {cells.map((dd,i)=>{if(!dd)return<div key={i}/>;const dateStr=`${ym}-${dd}`;const e=entries[dateStr];const av=e?avgE(e):null;const isToday=dateStr===today();const isFuture=dateStr>today();
           return<div key={i} style={{aspectRatio:"1",borderRadius:"6px",display:"flex",alignItems:"center",justifyContent:"center",flexDirection:"column",background:e?`${C[Math.round(av)]}28`:isFuture?"transparent":SURFACE,border:isToday?`2px solid ${ACCENT}`:e?`1px solid ${C[Math.round(av)]}50`:`1px solid ${BORDER}`,opacity:isFuture?.2:1}}>
             <div style={{fontSize:"10px",fontWeight:"600",color:e?C[Math.round(av)]:TEXT2}}>{parseInt(dd)}</div>
-            {e&&<div style={{fontSize:"9px",fontWeight:"800",color:C[Math.round(av)]}}>{av}</div>}
+            {e&&av&&<div style={{fontSize:"9px",fontWeight:"800",color:C[Math.round(av)]}}>{av}</div>}
           </div>;
         })}
       </div>
@@ -462,38 +282,32 @@ function HeatmapView({entries}){
     <div style={{...card,padding:"12px 16px"}}>
       <div style={{fontSize:"11px",color:TEXT2,fontWeight:"600",marginBottom:"8px",textTransform:"uppercase",letterSpacing:".08em"}}>Legenda</div>
       <div style={{display:"flex",gap:"8px",flexWrap:"wrap"}}>
-        {[1,2,3,4,5].map(n=><div key={n} style={{display:"flex",alignItems:"center",gap:"5px"}}>
-          <div style={{width:"12px",height:"12px",borderRadius:"3px",background:`${C[n]}28`,border:`1px solid ${C[n]}50`}}/><span style={{fontSize:"11px",color:TEXT2}}>{n}</span>
-        </div>)}
-        <div style={{display:"flex",alignItems:"center",gap:"5px"}}>
-          <div style={{width:"12px",height:"12px",borderRadius:"3px",background:SURFACE,border:`1px solid ${BORDER}`}}/><span style={{fontSize:"11px",color:TEXT2}}>Sem registro</span>
-        </div>
+        {[1,2,3,4,5].map(n=><div key={n} style={{display:"flex",alignItems:"center",gap:"5px"}}><div style={{width:"12px",height:"12px",borderRadius:"3px",background:`${C[n]}28`,border:`1px solid ${C[n]}50`}}/><span style={{fontSize:"11px",color:TEXT2}}>{n}</span></div>)}
+        <div style={{display:"flex",alignItems:"center",gap:"5px"}}><div style={{width:"12px",height:"12px",borderRadius:"3px",background:SURFACE,border:`1px solid ${BORDER}`}}/><span style={{fontSize:"11px",color:TEXT2}}>Sem registro</span></div>
       </div>
     </div>
   </div>;
 }
 
+// ── Weekly
 function WeeklyView({entries}){
   const sorted=Object.keys(entries).sort();if(sorted.length<2)return<div style={{textAlign:"center",padding:"56px 0",color:TEXT2,fontSize:"14px",lineHeight:1.8}}>Registre pelo menos 2 dias<br/>para ver o resumo semanal.</div>;
   const byWeek={};sorted.forEach(date=>{const wk=weekKey(date);if(!byWeek[wk]){byWeek[wk]={dates:[],entries:[]}}byWeek[wk].dates.push(date);byWeek[wk].entries.push(entries[date])});
   const weeks=Object.keys(byWeek).sort().reverse();
+  const wkAvgE=es=>{const f=es.flatMap(e=>DIMS.filter(d=>e[d.id]).map(d=>e[d.id]));return f.length?+(f.reduce((a,b)=>a+b,0)/f.length).toFixed(1):null};
   return<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-    {weeks.map((wk,wi)=>{const{dates,entries:es}=byWeek[wk];const wkAvg=+(es.reduce((s,e)=>s+avg(e),0)/es.length).toFixed(1);const prevWk=weeks[wi+1];const prevAvg=prevWk?(byWeek[prevWk].entries.reduce((s,e)=>s+avg(e),0)/byWeek[prevWk].entries.length):null;const delta=prevAvg?(wkAvg-prevAvg).toFixed(1):null;
+    {weeks.map((wk,wi)=>{const{dates,entries:es}=byWeek[wk];const wkAvg=wkAvgE(es);const prevWk=weeks[wi+1];const prevAvg=prevWk?wkAvgE(byWeek[prevWk].entries):null;const delta=prevAvg&&wkAvg?(wkAvg-prevAvg).toFixed(1):null;
       return<div key={wk} className="fa" style={card}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
           <div><div style={{fontSize:"13px",fontWeight:"700",color:TEXT}}>{fmtS(dates[0])} — {fmtS(dates[dates.length-1])}</div><div style={{fontSize:"11px",color:TEXT2,marginTop:"2px"}}>{es.length} dia{es.length>1?"s":""} registrado{es.length>1?"s":""}</div></div>
           <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
             {delta!==null&&<span style={{fontSize:"11px",fontWeight:"600",color:parseFloat(delta)>0?SUCCESS:parseFloat(delta)<0?DANGER:TEXT2}}>{parseFloat(delta)>0?"▲":parseFloat(delta)<0?"▼":"="} {Math.abs(delta)}</span>}
-            <span style={{fontSize:"22px",fontWeight:"800",color:C[Math.round(wkAvg)]}}>{wkAvg}</span>
+            {wkAvg&&<span style={{fontSize:"22px",fontWeight:"800",color:C[Math.round(wkAvg)]}}>{wkAvg}</span>}
           </div>
         </div>
         <div style={{display:"flex",flexDirection:"column",gap:"6px"}}>
           {DIMS.map(dim=>{const vals=es.map(e=>e[dim.id]).filter(Boolean);if(!vals.length)return null;const dAvg=+(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);
-            return<div key={dim.id} style={{display:"flex",alignItems:"center",gap:"8px"}}>
-              <span style={{fontSize:"13px",minWidth:"20px"}}>{dim.icon}</span>
-              <div style={{flex:1,height:"6px",borderRadius:"3px",background:SURFACE,overflow:"hidden"}}><div style={{height:"100%",width:`${(dAvg/5)*100}%`,borderRadius:"3px",background:C[Math.round(dAvg)]}}/></div>
-              <span style={{fontSize:"12px",fontWeight:"700",color:C[Math.round(dAvg)],minWidth:"28px",textAlign:"right"}}>{dAvg}</span>
-            </div>;
+            return<div key={dim.id} style={{display:"flex",alignItems:"center",gap:"8px"}}><span style={{fontSize:"13px",minWidth:"20px"}}>{dim.icon}</span><div style={{flex:1,height:"6px",borderRadius:"3px",background:SURFACE,overflow:"hidden"}}><div style={{height:"100%",width:`${(dAvg/5)*100}%`,borderRadius:"3px",background:C[Math.round(dAvg)]}}/></div><span style={{fontSize:"12px",fontWeight:"700",color:C[Math.round(dAvg)],minWidth:"28px",textAlign:"right"}}>{dAvg}</span></div>;
           })}
         </div>
       </div>;
@@ -501,8 +315,10 @@ function WeeklyView({entries}){
   </div>;
 }
 
+// ── Table
 function TableView({entries}){
   const sorted=Object.keys(entries).sort().reverse();if(!sorted.length)return<div style={{textAlign:"center",padding:"56px 0",color:TEXT2,fontSize:"14px"}}>Nenhum registro ainda.</div>;
+  const avgE=e=>{const f=DIMS.filter(d=>e[d.id]);return f.length?+(f.reduce((s,d)=>s+e[d.id],0)/f.length).toFixed(1):null};
   return<div style={{overflowX:"auto"}}>
     <table style={{width:"100%",borderCollapse:"collapse",fontSize:"11px",whiteSpace:"nowrap"}}>
       <thead><tr style={{borderBottom:`1px solid ${BORDER}`}}>
@@ -510,18 +326,94 @@ function TableView({entries}){
         {DIMS.map(d=><th key={d.id} style={{padding:"8px 6px",color:TEXT2,fontWeight:"600",textAlign:"center"}}>{d.icon}</th>)}
         <th style={{padding:"8px 6px",color:TEXT2,fontWeight:"600",textAlign:"center"}}>Méd</th>
       </tr></thead>
-      <tbody>
-        {sorted.map(date=>{const e=entries[date];const av=avg(e);
-          return<tr key={date} style={{borderBottom:`1px solid ${BORDER}22`}}>
-            <td style={{padding:"8px 8px 8px 0",color:TEXT2,fontWeight:"500",position:"sticky",left:0,background:SURFACE2,zIndex:1}}>
-              {fmtS(date)}<br/><span style={{fontSize:"10px",opacity:.6}}>{new Date(date+"T12:00:00").toLocaleDateString("pt-BR",{weekday:"short"})}</span>
-            </td>
-            {DIMS.map(d=><td key={d.id} style={{padding:"8px 6px",textAlign:"center"}}><span style={{fontWeight:"700",color:e[d.id]?C[e[d.id]]:TEXT2,fontSize:"13px"}}>{e[d.id]||"—"}</span></td>)}
-            <td style={{padding:"8px 6px",textAlign:"center"}}><span style={{fontWeight:"800",color:C[Math.round(av)],fontSize:"13px"}}>{av}</span></td>
-          </tr>;
-        })}
-      </tbody>
+      <tbody>{sorted.map(date=>{const e=entries[date];const av=avgE(e);
+        return<tr key={date} style={{borderBottom:`1px solid ${BORDER}22`}}>
+          <td style={{padding:"8px 8px 8px 0",color:TEXT2,fontWeight:"500",position:"sticky",left:0,background:SURFACE2,zIndex:1}}>{fmtS(date)}<br/><span style={{fontSize:"10px",opacity:.6}}>{new Date(date+"T12:00:00").toLocaleDateString("pt-BR",{weekday:"short"})}</span></td>
+          {DIMS.map(d=><td key={d.id} style={{padding:"8px 6px",textAlign:"center"}}><span style={{fontWeight:"700",color:e[d.id]?C[e[d.id]]:TEXT2,fontSize:"13px"}}>{e[d.id]||"—"}</span></td>)}
+          <td style={{padding:"8px 6px",textAlign:"center"}}>{av&&<span style={{fontWeight:"800",color:C[Math.round(av)],fontSize:"13px"}}>{av}</span>}</td>
+        </tr>;
+      })}</tbody>
     </table>
+  </div>;
+}
+
+// ── Correlação
+function DualAxisChart({datePoints}){
+  if(datePoints.length<2)return null;
+  const W=300,H=130,PL=36,PR=36,PT=12,PB=28;const cW=W-PL-PR,cH=H-PT-PB;
+  const scores=datePoints.map(p=>p.score);const doses=datePoints.map(p=>p.dose);
+  const minDose=Math.min(...doses),maxDose=Math.max(...doses);const doseRange=maxDose-minDose||1;
+  const xs=datePoints.map((_,i)=>PL+(i/(datePoints.length-1))*cW);
+  const scoreY=s=>PT+cH-((s-1)/4)*cH;const doseY=d=>PT+cH-((d-minDose)/doseRange)*cH;
+  const scorePath=xs.map((x,i)=>`${i?"L":"M"}${x},${scoreY(scores[i])}`).join(" ");
+  let dosePath="";xs.forEach((x,i)=>{const y=doseY(doses[i]);if(i===0){dosePath+=`M${x},${y}`;}else{const pY=doseY(doses[i-1]);dosePath+=`L${x},${pY}L${x},${y}`;}});
+  const doseChanges=datePoints.filter((p,i)=>i>0&&p.dose!==datePoints[i-1].dose);
+  return<svg width={W} height={H} style={{display:"block",overflow:"visible"}}>
+    {[1,2,3,4,5].map(s=><line key={s} x1={PL} y1={scoreY(s)} x2={W-PR} y2={scoreY(s)} stroke="rgba(255,255,255,0.05)" strokeWidth="1"/>)}
+    {doseChanges.map((p,i)=>{const idx=datePoints.indexOf(p);const x=xs[idx];return<g key={i}><line x1={x} y1={PT} x2={x} y2={PT+cH} stroke={`${WARNING}60`} strokeWidth="1.5" strokeDasharray="4,3"/><text x={x} y={PT-2} textAnchor="middle" fontSize="9" fill={WARNING}>{p.dose}mg</text></g>;})}
+    <path d={dosePath} fill="none" stroke={WARNING} strokeWidth="1.5" opacity=".7" strokeLinejoin="round"/>
+    <path d={scorePath} fill="none" stroke={ACCENT} strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" opacity=".9"/>
+    {xs.map((x,i)=><circle key={i} cx={x} cy={scoreY(scores[i])} r="3" fill={C[Math.round(scores[i])]}/>)}
+    <text x={PL-4} y={scoreY(5)} textAnchor="end" fontSize="9" fill={ACCENT} dominantBaseline="middle">5</text>
+    <text x={PL-4} y={scoreY(3)} textAnchor="end" fontSize="9" fill={ACCENT} dominantBaseline="middle">3</text>
+    <text x={PL-4} y={scoreY(1)} textAnchor="end" fontSize="9" fill={ACCENT} dominantBaseline="middle">1</text>
+    {[minDose,maxDose].filter((d,i,a)=>a.indexOf(d)===i).map((d,i)=><text key={i} x={W-PR+4} y={doseY(d)} textAnchor="start" fontSize="9" fill={WARNING} dominantBaseline="middle">{d}mg</text>)}
+    {datePoints.map((p,i)=>{if(datePoints.length<=7||i%(Math.ceil(datePoints.length/6))===0||i===datePoints.length-1)return<text key={i} x={xs[i]} y={H-4} textAnchor="middle" fontSize="9" fill={TEXT2}>{fmtS(p.date)}</text>;return null;})}
+    <line x1={PL} y1={PT} x2={PL} y2={PT+cH} stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
+    <line x1={PL} y1={PT+cH} x2={W-PR} y2={PT+cH} stroke="rgba(255,255,255,0.1)" strokeWidth="1"/>
+  </svg>;
+}
+
+function CorrelacaoTab({entries,meds}){
+  const activeMeds=meds.filter(m=>m.doses.length>0);const[selMed,setSelMed]=useState(activeMeds[0]?.id||null);
+  const med=meds.find(m=>m.id===selMed);const sortedDates=Object.keys(entries).sort();
+  const avgE=e=>{const f=DIMS.filter(d=>e[d.id]);return f.length?+(f.reduce((s,d)=>s+e[d.id],0)/f.length).toFixed(1):null};
+  const datePoints=useMemo(()=>{if(!med)return[];return sortedDates.map(date=>{const e=entries[date];const d=doseAt(med,date);if(!e||!d)return null;const sc=avgE(e);if(!sc)return null;return{date,score:parseFloat(sc),dose:d.mg};}).filter(Boolean);},[med,entries,sortedDates]);
+  const periods=useMemo(()=>{if(!med)return[];const dosesSort=[...med.doses].sort((a,b)=>a.data>b.data?1:-1);return dosesSort.map((dose,i)=>{const nextDose=dosesSort[i+1];const datesInPeriod=sortedDates.filter(d=>d>=dose.data&&entries[d]&&(!nextDose||d<nextDose.data));if(!datesInPeriod.length)return null;const dimAvgs=DIMS.map(dim=>{const vals=datesInPeriod.map(d=>entries[d][dim.id]).filter(Boolean);return vals.length?+(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1):null;});const overall=+(datesInPeriod.reduce((s,d)=>s+parseFloat(avgE(entries[d])||0),0)/datesInPeriod.length).toFixed(1);return{dose:dose.mg,startDate:dose.data,endDate:nextDose?.data||null,dates:datesInPeriod,dimAvgs,overall};}).filter(Boolean);},[med,entries,sortedDates]);
+
+  if(!med||activeMeds.length===0)return<div style={{textAlign:"center",padding:"56px 20px",color:TEXT2,fontSize:"14px",lineHeight:1.8}}><div style={{fontSize:"32px",marginBottom:"12px"}}>💊</div>Cadastre um medicamento com dose<br/>na aba Tratamento para ver a correlação.</div>;
+  if(datePoints.length<2)return<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
+    {activeMeds.length>1&&<div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>{activeMeds.map(m=><button key={m.id} onClick={()=>setSelMed(m.id)} style={{padding:"6px 14px",borderRadius:"8px",fontFamily:"inherit",background:selMed===m.id?`${ACCENT}20`:SURFACE2,border:`1px solid ${selMed===m.id?ACCENT:BORDER}`,color:selMed===m.id?ACCENT:TEXT2,fontSize:"12px",fontWeight:selMed===m.id?"600":"400"}}>{m.nome}</button>)}</div>}
+    <div style={{textAlign:"center",padding:"56px 20px",color:TEXT2,fontSize:"14px",lineHeight:1.8}}><div style={{fontSize:"32px",marginBottom:"12px"}}>📈</div>Registre pelo menos 2 dias<br/>para ver a correlação com a dose.</div>
+  </div>;
+
+  return<div style={{display:"flex",flexDirection:"column",gap:"14px"}}>
+    {activeMeds.length>1&&<div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>{activeMeds.map(m=><button key={m.id} onClick={()=>setSelMed(m.id)} style={{padding:"6px 14px",borderRadius:"8px",fontFamily:"inherit",background:selMed===m.id?`${ACCENT}20`:SURFACE2,border:`1px solid ${selMed===m.id?ACCENT:BORDER}`,color:selMed===m.id?ACCENT:TEXT2,fontSize:"12px",fontWeight:selMed===m.id?"600":"400"}}>{m.nome}</button>)}</div>}
+    <div style={card}>
+      <div style={{fontSize:"12px",fontWeight:"600",color:TEXT,marginBottom:"4px"}}>Score × Dose — evolução temporal</div>
+      <div style={{fontSize:"11px",color:TEXT2,marginBottom:"14px"}}>{med.nome} · {datePoints.length} dias registrados</div>
+      <div style={{overflowX:"auto"}}><DualAxisChart datePoints={datePoints}/></div>
+      <div style={{display:"flex",gap:"16px",marginTop:"12px",paddingTop:"12px",borderTop:`1px solid ${BORDER}`}}>
+        <div style={{display:"flex",alignItems:"center",gap:"6px"}}><div style={{width:"20px",height:"2.5px",background:ACCENT,borderRadius:"2px"}}/><span style={{fontSize:"11px",color:TEXT2}}>Score médio (1–5)</span></div>
+        <div style={{display:"flex",alignItems:"center",gap:"6px"}}><div style={{width:"20px",height:"0",borderTop:`2px solid ${WARNING}`,opacity:.7}}/><span style={{fontSize:"11px",color:TEXT2}}>Dose (mg)</span></div>
+      </div>
+    </div>
+    <div style={{fontSize:"11px",color:TEXT2,textTransform:"uppercase",letterSpacing:".1em",fontWeight:"600",marginTop:"4px"}}>Análise por período de dosagem</div>
+    {periods.length===1&&<div style={{...card,background:`${ACCENT}08`,border:`1px solid ${ACCENT}20`}}><div style={{fontSize:"12px",color:TEXT2,lineHeight:1.6}}>📊 Com mais dados e ajustes de dose, esta seção vai mostrar a comparação antes vs depois de cada mudança de dosagem.</div></div>}
+    {[...periods].reverse().map((period,pi)=>{const prev=periods[periods.length-2-pi];
+      return<div key={period.dose+period.startDate} className="fa" style={card}>
+        <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"14px"}}>
+          <div>
+            <div style={{display:"flex",alignItems:"center",gap:"8px"}}><span style={{fontSize:"15px",fontWeight:"700",color:WARNING}}>💊 {period.dose}mg</span>{pi===0&&<span style={{fontSize:"10px",padding:"2px 8px",borderRadius:"20px",background:`${SUCCESS}20`,color:SUCCESS,fontWeight:"600"}}>Atual</span>}</div>
+            <div style={{fontSize:"11px",color:TEXT2,marginTop:"3px"}}>{fmtS(period.startDate)} → {period.endDate?fmtS(period.endDate):"hoje"} · {period.dates.length} dia{period.dates.length>1?"s":""}</div>
+          </div>
+          <div style={{textAlign:"right"}}>
+            <div style={{fontSize:"22px",fontWeight:"800",color:C[Math.round(period.overall)]}}>{period.overall}</div>
+            {prev&&<div style={{fontSize:"11px",fontWeight:"600",color:period.overall>prev.overall?SUCCESS:period.overall<prev.overall?DANGER:TEXT2}}>{period.overall>prev.overall?"▲":period.overall<prev.overall?"▼":"="} {Math.abs(period.overall-prev.overall).toFixed(1)} vs {prev.dose}mg</div>}
+          </div>
+        </div>
+        <div style={{display:"flex",flexDirection:"column",gap:"7px"}}>
+          {DIMS.map((dim,di)=>{const val=period.dimAvgs[di];const prevVal=prev?.dimAvgs[di];if(!val)return null;const delta=prevVal?(val-prevVal).toFixed(1):null;
+            return<div key={dim.id} style={{display:"flex",alignItems:"center",gap:"8px"}}>
+              <span style={{fontSize:"13px",minWidth:"20px"}}>{dim.icon}</span>
+              <div style={{flex:1,height:"6px",borderRadius:"3px",background:SURFACE,overflow:"hidden"}}><div style={{height:"100%",width:`${(val/5)*100}%`,borderRadius:"3px",background:C[Math.round(val)]}}/></div>
+              <span style={{fontSize:"12px",fontWeight:"700",color:C[Math.round(val)],minWidth:"24px",textAlign:"right"}}>{val}</span>
+              {delta!==null&&<span style={{fontSize:"10px",fontWeight:"600",minWidth:"32px",textAlign:"right",color:parseFloat(delta)>0?SUCCESS:parseFloat(delta)<0?DANGER:TEXT2}}>{parseFloat(delta)>0?"▲":parseFloat(delta)<0?"▼":"="}{Math.abs(delta)}</span>}
+            </div>;
+          })}
+        </div>
+      </div>;
+    })}
   </div>;
 }
 
@@ -541,10 +433,7 @@ function TratamentoTab({meds,setMeds,onMedChange,onMedDelete}){
       return<div key={med.id} className="fa" style={{...card,opacity:ativo?1:.6}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start",marginBottom:"12px"}}>
           <div style={{flex:1}}>
-            <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}>
-              <span style={{fontSize:"16px",fontWeight:"700",color:TEXT}}>{med.nome}</span>
-              <span style={{fontSize:"10px",fontWeight:"600",padding:"2px 8px",borderRadius:"20px",background:ativo?`${SUCCESS}20`:`${TEXT2}15`,color:ativo?SUCCESS:TEXT2}}>{ativo?"Ativo":"Encerrado"}</span>
-            </div>
+            <div style={{display:"flex",alignItems:"center",gap:"8px",flexWrap:"wrap"}}><span style={{fontSize:"16px",fontWeight:"700",color:TEXT}}>{med.nome}</span><span style={{fontSize:"10px",fontWeight:"600",padding:"2px 8px",borderRadius:"20px",background:ativo?`${SUCCESS}20`:`${TEXT2}15`,color:ativo?SUCCESS:TEXT2}}>{ativo?"Ativo":"Encerrado"}</span></div>
             {med.principioAtivo&&<div style={{fontSize:"12px",color:TEXT2,marginTop:"2px"}}>{med.principioAtivo}</div>}
             {med.prescritor&&<div style={{fontSize:"11px",color:TEXT2,opacity:.7}}>Dr(a). {med.prescritor}</div>}
           </div>
@@ -558,12 +447,10 @@ function TratamentoTab({meds,setMeds,onMedChange,onMedDelete}){
         </div>
         {dosesSort.length>0&&<div style={{marginBottom:"14px"}}>
           <div style={{fontSize:"11px",color:TEXT2,textTransform:"uppercase",letterSpacing:".08em",fontWeight:"600",marginBottom:"8px"}}>Histórico de dosagem</div>
-          <div style={{position:"relative",paddingLeft:"18px"}}>
-            <div style={{position:"absolute",left:"7px",top:0,bottom:0,width:"1px",background:BORDER}}/>
+          <div style={{position:"relative",paddingLeft:"18px"}}><div style={{position:"absolute",left:"7px",top:0,bottom:0,width:"1px",background:BORDER}}/>
             {dosesSort.map((d,i)=><div key={d.id} style={{position:"relative",marginBottom:"8px",display:"flex",alignItems:"center",gap:"10px"}}>
               <div style={{position:"absolute",left:"-13px",width:"8px",height:"8px",borderRadius:"50%",background:i===dosesSort.length-1?ACCENT:TEXT2,border:`2px solid ${i===dosesSort.length-1?ACCENT:SURFACE}`}}/>
-              <span style={{fontSize:"12px",color:TEXT2,minWidth:"50px"}}>{fmtS(d.data)}</span>
-              <span style={{fontSize:"13px",fontWeight:"600",color:i===dosesSort.length-1?ACCENT:TEXT}}>{d.mg}mg</span>
+              <span style={{fontSize:"12px",color:TEXT2,minWidth:"50px"}}>{fmtS(d.data)}</span><span style={{fontSize:"13px",fontWeight:"600",color:i===dosesSort.length-1?ACCENT:TEXT}}>{d.mg}mg</span>
               {i===dosesSort.length-1&&<span style={{fontSize:"10px",color:ACCENT,opacity:.6}}>atual</span>}
             </div>)}
           </div>
@@ -598,63 +485,34 @@ function TratamentoTab({meds,setMeds,onMedChange,onMedDelete}){
 // ── APP
 function App(){
   const[unlocked,setUnlocked]=useState(!!sessionStorage.getItem(SES_KEY));
-  const[view,setView]=useState("home");
-  const[histView,setHistView]=useState("cards");
-  const[entries,setEntries]=useState(()=>loadJ(DATA_KEY,{}));
-  const[meds,setMeds]=useState(()=>loadJ(MED_KEY,[]));
-  const[selDate,setSelDate]=useState(today());
-  const[draft,setDraft]=useState({});
-  const[anchors,setAnchors]=useState(true);
-  const[openNotes,setOpenNotes]=useState({});
-  const[saving,setSaving]=useState(false);
-  const[saved,setSaved]=useState(false);
-  const[syncStatus,setSyncStatus]=useState("idle");
+  const[view,setView]=useState("home");const[histView,setHistView]=useState("cards");
+  const[entries,setEntries]=useState(()=>loadJ(DATA_KEY,{}));const[meds,setMeds]=useState(()=>loadJ(MED_KEY,[]));
+  const[selDate,setSelDate]=useState(today());const[draft,setDraft]=useState({});
+  const[anchors,setAnchors]=useState(true);const[openNotes,setOpenNotes]=useState({});
+  const[saving,setSaving]=useState(false);const[saved,setSaved]=useState(false);const[syncStatus,setSyncStatus]=useState("idle");
 
-  useEffect(()=>{
-    if(!unlocked)return;
-    setSyncStatus("syncing");
-    Promise.all([sbFetchEntries(),sbFetchMeds()])
-      .then(([re,rm])=>{
-        const merged={...loadJ(DATA_KEY,{}),...re};
-        setEntries(merged);persist(DATA_KEY,merged);
-        if(rm.length>0){setMeds(rm);persist(MED_KEY,rm);}
-        setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000);
-      })
-      .catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);});
-  },[unlocked]);
-
+  useEffect(()=>{if(!unlocked)return;setSyncStatus("syncing");Promise.all([sbFetchEntries(),sbFetchMeds()]).then(([re,rm])=>{const merged={...loadJ(DATA_KEY,{}),...re};setEntries(merged);persist(DATA_KEY,merged);if(rm.length>0){setMeds(rm);persist(MED_KEY,rm);}setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000);}).catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);});},[unlocked]);
   useEffect(()=>{const e=entries[selDate];setDraft(e?{...e}:{});setOpenNotes({});},[selDate]);
 
-  if(!unlocked)return<PinScreen onUnlock={()=>setUnlocked(true)}/>;
+  if(!unlocked)return<><PinScreen onUnlock={()=>setUnlocked(true)}/><InstallBanner/></>;
 
-  const allFilled=DIMS.every(d=>draft[d.id]>0);
-  const isToday=selDate===today();
-  const alreadySaved=!!entries[selDate];
+  const allFilled=DIMS.every(d=>draft[d.id]>0);const isToday=selDate===today();const alreadySaved=!!entries[selDate];
+  const avgEntry=e=>{const f=DIMS.filter(d=>e&&e[d.id]);return f.length?+(f.reduce((s,d)=>s+e[d.id],0)/f.length).toFixed(1):null};
 
-  const handleSave=()=>{
-    if(!allFilled)return;setSaving(true);
-    const u={...entries,[selDate]:draft};persist(DATA_KEY,u);setEntries(u);setSaved(true);
-    setSyncStatus("syncing");
-    sbUpsertEntry(selDate,draft).then(()=>{setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000);}).catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);});
-    setTimeout(()=>{setSaved(false);setSaving(false);setView("history");},1600);
-  };
-
+  const handleSave=()=>{if(!allFilled)return;setSaving(true);const u={...entries,[selDate]:draft};persist(DATA_KEY,u);setEntries(u);setSaved(true);setSyncStatus("syncing");sbUpsertEntry(selDate,draft).then(()=>{setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000);}).catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);});setTimeout(()=>{setSaved(false);setSaving(false);setView("history");},1600);};
   const handleMedChange=med=>{setSyncStatus("syncing");sbUpsertMed(med).then(()=>{setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000);}).catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);})};
   const handleMedDelete=id=>{setSyncStatus("syncing");sbDeleteMed(id).then(()=>{setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000);}).catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000);})};
 
-  const sorted=Object.keys(entries).sort();
-  const last7=sorted.slice(-7);
-  const allDoseMarkers=[...new Set(meds.flatMap(m=>m.doses.map(d=>d.data)))];
-  const markersInLast7=allDoseMarkers.filter(d=>last7.includes(d));
+  const sorted=Object.keys(entries).sort();const last7=sorted.slice(-7);
+  const allDoseMarkers=[...new Set(meds.flatMap(m=>m.doses.map(d=>d.data)))];const markersInLast7=allDoseMarkers.filter(d=>last7.includes(d));
   const medsHoje=medsAt(meds,today());
   const dimAvg=id=>{const v=last7.map(d=>entries[d]?.[id]).filter(Boolean);return v.length?(v.reduce((a,b)=>a+b,0)/v.length).toFixed(1):null};
 
   const navBtn=a=>({flex:1,padding:"8px 2px",borderRadius:"8px",border:"none",fontFamily:"inherit",background:a?`${ACCENT}20`:SURFACE2,color:a?ACCENT:TEXT2,fontSize:"11px",fontWeight:a?"600":"400",cursor:"pointer"});
   const subBtn=a=>({padding:"6px 12px",borderRadius:"6px",border:`1px solid ${a?ACCENT:BORDER}`,fontFamily:"inherit",background:a?`${ACCENT}15`:"transparent",color:a?ACCENT:TEXT2,fontSize:"11px",fontWeight:a?"600":"400",cursor:"pointer"});
 
-  return<div style={{minHeight:"100vh",maxWidth:"430px",margin:"0 auto",paddingBottom:"90px",background:BG}}>
-
-    {/* Header */}
+  return<>
+  <div style={{minHeight:"100vh",maxWidth:"430px",margin:"0 auto",paddingBottom:"90px",background:BG}}>
     <div style={{padding:"52px 20px 16px",borderBottom:`1px solid ${BORDER}`}}>
       <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
         <div>
@@ -669,7 +527,6 @@ function App(){
       </div>
     </div>
 
-    {/* Nav — 5 abas */}
     <div style={{display:"flex",padding:"10px 20px",gap:"5px",background:SURFACE,borderBottom:`1px solid ${BORDER}`}}>
       {[["home","Hoje"],["history","Histórico"],["stats","Evolução"],["corr","Correlação"],["trat","Tratamento"]].map(([v,l])=>(
         <button key={v} onClick={()=>setView(v)} style={navBtn(view===v)}>{l}</button>
@@ -677,42 +534,22 @@ function App(){
     </div>
 
     <div style={{padding:"12px 20px"}}>
-
-      {/* ── HOJE ── */}
       {view==="home"&&<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
         <div style={{...card,padding:"12px 16px",display:"flex",alignItems:"center",justifyContent:"space-between",gap:"12px"}}>
-          <div>
-            <div style={{fontSize:"11px",color:TEXT2,fontWeight:"600",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"3px"}}>{isToday?"Data do registro":"Registro retroativo"}</div>
-            <div style={{fontSize:"13px",fontWeight:"600",color:isToday?ACCENT:WARNING}}>{isToday?"Hoje · "+new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"}):fmtF(selDate)}</div>
-          </div>
+          <div><div style={{fontSize:"11px",color:TEXT2,fontWeight:"600",textTransform:"uppercase",letterSpacing:".06em",marginBottom:"3px"}}>{isToday?"Data do registro":"Registro retroativo"}</div><div style={{fontSize:"13px",fontWeight:"600",color:isToday?ACCENT:WARNING}}>{isToday?"Hoje · "+new Date().toLocaleDateString("pt-BR",{weekday:"long",day:"numeric",month:"long"}):fmtF(selDate)}</div></div>
           <input type="date" value={selDate} max={today()} onChange={e=>setSelDate(e.target.value)} style={{...inp,width:"auto",padding:"7px 10px",fontSize:"12px",borderColor:isToday?BORDER:`${WARNING}50`}}/>
         </div>
-        {!isToday&&<div style={{display:"flex",alignItems:"center",gap:"8px",padding:"10px 12px",borderRadius:"8px",background:`${WARNING}10`,border:`1px solid ${WARNING}30`}}>
-          <span style={{fontSize:"16px"}}>📅</span><span style={{fontSize:"12px",color:WARNING}}>Você está editando um registro passado</span>
-        </div>}
-        {alreadySaved&&<div className="fa" style={{...card,background:`${SUCCESS}12`,border:`1px solid ${SUCCESS}35`,display:"flex",alignItems:"center",gap:"12px"}}>
-          <span style={{fontSize:"22px"}}>✅</span>
-          <div>
-            <div style={{fontWeight:"600",fontSize:"13px",color:TEXT}}>{isToday?"Registrado hoje":"Já registrado neste dia"}</div>
-            <div style={{fontSize:"12px",color:TEXT2}}>Média: <span style={{color:C[Math.round(avg(entries[selDate]))],fontWeight:"700"}}>{avg(entries[selDate])}</span> · editando abaixo</div>
-          </div>
-        </div>}
-        <div style={{display:"flex",justifyContent:"flex-end"}}>
-          <button onClick={()=>setAnchors(p=>!p)} style={{background:SURFACE2,border:`1px solid ${BORDER}`,borderRadius:"8px",padding:"4px 10px",fontSize:"11px",color:TEXT2,fontFamily:"inherit"}}>{anchors?"Ocultar âncoras":"Ver âncoras"}</button>
-        </div>
+        {!isToday&&<div style={{display:"flex",alignItems:"center",gap:"8px",padding:"10px 12px",borderRadius:"8px",background:`${WARNING}10`,border:`1px solid ${WARNING}30`}}><span style={{fontSize:"16px"}}>📅</span><span style={{fontSize:"12px",color:WARNING}}>Você está editando um registro passado</span></div>}
+        {alreadySaved&&<div className="fa" style={{...card,background:`${SUCCESS}12`,border:`1px solid ${SUCCESS}35`,display:"flex",alignItems:"center",gap:"12px"}}><span style={{fontSize:"22px"}}>✅</span><div><div style={{fontWeight:"600",fontSize:"13px",color:TEXT}}>{isToday?"Registrado hoje":"Já registrado neste dia"}</div><div style={{fontSize:"12px",color:TEXT2}}>Média: <span style={{color:C[Math.round(avgEntry(entries[selDate]))],fontWeight:"700"}}>{avgEntry(entries[selDate])}</span> · editando abaixo</div></div></div>}
+        <div style={{display:"flex",justifyContent:"flex-end"}}><button onClick={()=>setAnchors(p=>!p)} style={{background:SURFACE2,border:`1px solid ${BORDER}`,borderRadius:"8px",padding:"4px 10px",fontSize:"11px",color:TEXT2,fontFamily:"inherit"}}>{anchors?"Ocultar âncoras":"Ver âncoras"}</button></div>
         {DIMS.map(dim=><div key={dim.id} className="fa" style={card}>
           <div style={{display:"flex",alignItems:"center",justifyContent:"space-between",marginBottom:"12px"}}>
             <div style={{display:"flex",alignItems:"center",gap:"8px"}}><span style={{fontSize:"19px"}}>{dim.icon}</span><span style={{fontSize:"14px",fontWeight:"600",color:TEXT}}>{dim.label}</span></div>
             <button onClick={()=>setOpenNotes(p=>({...p,[dim.id]:!p[dim.id]}))} style={{background:openNotes[dim.id]?`${ACCENT}15`:SURFACE,border:`1px solid ${BORDER}`,borderRadius:"8px",padding:"3px 10px",fontSize:"11px",color:openNotes[dim.id]?ACCENT:TEXT2,fontFamily:"inherit"}}>+ nota</button>
           </div>
-          <div style={{display:"flex",gap:"6px",justifyContent:"center"}}>
-            {[1,2,3,4,5].map(n=><button key={n} onClick={()=>setDraft(p=>({...p,[dim.id]:n}))} style={{width:"46px",height:"46px",borderRadius:"8px",fontFamily:"inherit",border:draft[dim.id]===n?`2px solid ${C[n]}`:`1px solid ${BORDER}`,background:draft[dim.id]===n?`${C[n]}20`:SURFACE,color:draft[dim.id]===n?C[n]:TEXT2,fontSize:"16px",fontWeight:draft[dim.id]===n?"700":"400",transition:"all .15s"}}>{n}</button>)}
-          </div>
+          <div style={{display:"flex",gap:"6px",justifyContent:"center"}}>{[1,2,3,4,5].map(n=><button key={n} onClick={()=>setDraft(p=>({...p,[dim.id]:n}))} style={{width:"46px",height:"46px",borderRadius:"8px",fontFamily:"inherit",border:draft[dim.id]===n?`2px solid ${C[n]}`:`1px solid ${BORDER}`,background:draft[dim.id]===n?`${C[n]}20`:SURFACE,color:draft[dim.id]===n?C[n]:TEXT2,fontSize:"16px",fontWeight:draft[dim.id]===n?"700":"400",transition:"all .15s"}}>{n}</button>)}</div>
           {draft[dim.id]>0&&<div style={{textAlign:"center",fontSize:"11px",color:C[draft[dim.id]],fontWeight:"600",letterSpacing:".05em",textTransform:"uppercase",marginTop:"8px"}}>{dim.desc[draft[dim.id]-1]}</div>}
-          {anchors&&<div style={{display:"flex",justifyContent:"space-between",marginTop:"10px",gap:"8px"}}>
-            <div style={{fontSize:"10px",color:TEXT2,maxWidth:"46%",lineHeight:1.4,opacity:.75}}>① {dim.a1}</div>
-            <div style={{fontSize:"10px",color:TEXT2,maxWidth:"46%",lineHeight:1.4,textAlign:"right",opacity:.75}}>⑤ {dim.a5}</div>
-          </div>}
+          {anchors&&<div style={{display:"flex",justifyContent:"space-between",marginTop:"10px",gap:"8px"}}><div style={{fontSize:"10px",color:TEXT2,maxWidth:"46%",lineHeight:1.4,opacity:.75}}>① {dim.a1}</div><div style={{fontSize:"10px",color:TEXT2,maxWidth:"46%",lineHeight:1.4,textAlign:"right",opacity:.75}}>⑤ {dim.a5}</div></div>}
           {openNotes[dim.id]&&<textarea rows={2} placeholder={`Observação sobre ${dim.label.toLowerCase()}...`} value={draft[`n_${dim.id}`]||""} onChange={e=>setDraft(p=>({...p,[`n_${dim.id}`]:e.target.value}))} style={{marginTop:"12px",width:"100%",background:SURFACE,border:`1px solid ${BORDER}`,borderRadius:"8px",padding:"10px 12px",color:TEXT,fontSize:"13px",outline:"none",lineHeight:"1.5",fontFamily:"inherit"}}/>}
         </div>)}
         <button onClick={handleSave} disabled={!allFilled||saving} style={{width:"100%",padding:"16px",borderRadius:"8px",border:"none",fontFamily:"inherit",background:saved?SUCCESS:allFilled?ACCENT:SURFACE2,color:allFilled?"#fff":TEXT2,fontSize:"15px",fontWeight:"700",cursor:allFilled?"pointer":"default",transition:"all .2s",marginTop:"4px"}}>
@@ -720,13 +557,8 @@ function App(){
         </button>
       </div>}
 
-      {/* ── HISTÓRICO ── */}
       {view==="history"&&<div style={{display:"flex",flexDirection:"column",gap:"12px"}}>
-        <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>
-          {[["cards","Cards"],["heatmap","Heatmap"],["weekly","Semanal"],["table","Tabela"]].map(([v,l])=>(
-            <button key={v} onClick={()=>setHistView(v)} style={subBtn(histView===v)}>{l}</button>
-          ))}
-        </div>
+        <div style={{display:"flex",gap:"6px",flexWrap:"wrap"}}>{[["cards","Cards"],["heatmap","Heatmap"],["weekly","Semanal"],["table","Tabela"]].map(([v,l])=><button key={v} onClick={()=>setHistView(v)} style={subBtn(histView===v)}>{l}</button>)}</div>
         {sorted.length>0&&<button onClick={()=>exportCSV(entries)} style={{width:"100%",padding:"11px",borderRadius:"8px",background:`${SUCCESS}12`,border:`1px solid ${SUCCESS}35`,color:SUCCESS,fontSize:"13px",fontWeight:"600",fontFamily:"inherit",display:"flex",alignItems:"center",justifyContent:"center",gap:"8px"}}>⬇ Exportar CSV ({sorted.length} registros)</button>}
         {histView==="cards"&&(sorted.length===0?<div style={{textAlign:"center",padding:"56px 0",color:TEXT2,fontSize:"14px",lineHeight:1.8}}>Nenhum registro ainda.<br/>Comece pelo "Hoje".</div>:[...sorted].reverse().map(date=><HistoryItem key={date} date={date} entry={entries[date]} meds={meds} allDoseMarkers={allDoseMarkers}/>))}
         {histView==="heatmap"&&<HeatmapView entries={entries}/>}
@@ -734,32 +566,22 @@ function App(){
         {histView==="table"&&<div style={{...card,overflowX:"auto"}}><TableView entries={entries}/></div>}
       </div>}
 
-      {/* ── EVOLUÇÃO ── */}
       {view==="stats"&&<div style={{display:"flex",flexDirection:"column",gap:"10px"}}>
         {sorted.length<2&&<div style={{textAlign:"center",padding:"56px 0",color:TEXT2,fontSize:"14px",lineHeight:1.8}}>Registre pelo menos 2 dias<br/>para ver a evolução.</div>}
         {sorted.length>=2&&<>
-          {markersInLast7.length>0&&<div style={{...card,background:`${WARNING}08`,border:`1px solid ${WARNING}30`,display:"flex",alignItems:"center",gap:"10px"}}>
-            <div style={{width:"22px",height:"0",borderTop:`2px dashed ${WARNING}80`,flexShrink:0}}/>
-            <span style={{fontSize:"12px",color:WARNING}}>Linha tracejada = ajuste de dose</span>
-          </div>}
+          {markersInLast7.length>0&&<div style={{...card,background:`${WARNING}08`,border:`1px solid ${WARNING}30`,display:"flex",alignItems:"center",gap:"10px"}}><div style={{width:"22px",height:"0",borderTop:`2px dashed ${WARNING}80`,flexShrink:0}}/><span style={{fontSize:"12px",color:WARNING}}>Linha tracejada = ajuste de dose</span></div>}
           <div style={card}>
             <div style={{fontSize:"10px",color:TEXT2,textTransform:"uppercase",letterSpacing:".1em",marginBottom:"12px",fontWeight:"600"}}>Média geral · últimos {last7.length} dias</div>
             <div style={{display:"flex",gap:"4px",alignItems:"flex-end",height:"52px"}}>
-              {last7.map(date=>{const e=entries[date];const av=DIMS.reduce((s,d)=>s+(e?.[d.id]||0),0)/DIMS.length;const h=Math.max(8,(av/5)*52);const isDose=allDoseMarkers.includes(date);
-                return<div key={date} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"4px"}}>
-                  <div style={{width:"100%",height:`${h}px`,borderRadius:"4px 4px 2px 2px",background:C[Math.round(av)],opacity:.85,outline:isDose?`2px solid ${WARNING}`:""}}/>
-                  <div style={{fontSize:"9px",color:isDose?WARNING:TEXT2,fontWeight:isDose?"700":"400"}}>{fmtS(date)}</div>
-                </div>;
+              {last7.map(date=>{const e=entries[date];const f=DIMS.filter(d=>e?.[d.id]);const av=f.length?f.reduce((s,d)=>s+e[d.id],0)/f.length:0;const h=Math.max(8,(av/5)*52);const isDose=allDoseMarkers.includes(date);
+                return<div key={date} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"4px"}}><div style={{width:"100%",height:`${h}px`,borderRadius:"4px 4px 2px 2px",background:C[Math.round(av)],opacity:.85,outline:isDose?`2px solid ${WARNING}`:""}}/><div style={{fontSize:"9px",color:isDose?WARNING:TEXT2,fontWeight:isDose?"700":"400"}}>{fmtS(date)}</div></div>;
               })}
             </div>
           </div>
           {DIMS.map(dim=>{const av=dimAvg(dim.id);const data=last7.map(d=>entries[d]?.[dim.id]).filter(Boolean);const an=Math.round(parseFloat(av));
             return<div key={dim.id} className="fa" style={card}>
               <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:data.length>=2?"10px":"0"}}>
-                <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
-                  <span style={{fontSize:"18px"}}>{dim.icon}</span>
-                  <div><div style={{fontSize:"13px",fontWeight:"600",color:TEXT}}>{dim.label}</div><div style={{fontSize:"10px",color:av?C[an]:TEXT2,fontWeight:"600",marginTop:"2px"}}>Média {av||"--"} · {last7.length} dias</div></div>
-                </div>
+                <div style={{display:"flex",alignItems:"center",gap:"9px"}}><span style={{fontSize:"18px"}}>{dim.icon}</span><div><div style={{fontSize:"13px",fontWeight:"600",color:TEXT}}>{dim.label}</div><div style={{fontSize:"10px",color:av?C[an]:TEXT2,fontWeight:"600",marginTop:"2px"}}>Média {av||"--"} · {last7.length} dias</div></div></div>
                 <span style={{fontSize:"22px",fontWeight:"800",color:av?C[an]:TEXT2}}>{av||"--"}</span>
               </div>
               {data.length>=2&&<TrendLine data={data} color={C[an]||ACCENT} markers={markersInLast7} dates={last7}/>}
@@ -768,13 +590,12 @@ function App(){
         </>}
       </div>}
 
-      {/* ── CORRELAÇÃO ── */}
       {view==="corr"&&<CorrelacaoTab entries={entries} meds={meds}/>}
-
-      {/* ── TRATAMENTO ── */}
       {view==="trat"&&<TratamentoTab meds={meds} setMeds={setMeds} onMedChange={handleMedChange} onMedDelete={handleMedDelete}/>}
     </div>
-  </div>;
+  </div>
+  <InstallBanner/>
+  </>;
 }
 
 ReactDOM.createRoot(document.getElementById("root")).render(<App/>);
