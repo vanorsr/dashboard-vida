@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="Clarity"/>
-<meta name="description" content="Seu dia, sua evolução"/>
+<meta name="description" content="Meu dia, minha evolução"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png"/>
 <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png"/>
@@ -266,7 +266,7 @@ function PinScreen({onUnlock}){
       <div className="fa" style={{textAlign:"center",marginBottom:"44px"}}>
         <img src="icon-192.png" alt="icon" style={{width:"72px",height:"72px",borderRadius:"16px",marginBottom:"16px",boxShadow:"0 4px 16px rgba(9,47,89,0.15)"}}/>
         <div style={{fontSize:"26px",fontWeight:"800",color:PRIMARY,letterSpacing:"-.02em"}}>Clarity</div>
-        <div style={{fontSize:"13px",color:TEXT2,marginTop:"4px"}}>Seu dia, sua evolução</div>
+        <div style={{fontSize:"13px",color:TEXT2,marginTop:"4px"}}>Meu dia, minha evolução</div>
         <div style={{fontSize:"12px",color:DISABLED,marginTop:"10px"}}>{lbl}</div>
       </div>
       <div className={err?"shake":""} style={{display:"flex",gap:"14px",marginBottom:"40px"}}>
@@ -336,7 +336,7 @@ function HistoryItem({date,entry,meds,allDoseMarkers}){
           <div style={{display:"flex",gap:"4px",flexWrap:"wrap",marginTop:"4px"}}>
             {medsNoDia.map(m=>{const d=doseAt(m,date);return<span key={m.id} style={{fontSize:"10px",padding:"2px 8px",borderRadius:"20px",background:`${PRIMARY}10`,color:PRIMARY,fontWeight:"600"}}>{m.nome}{d?` ${d.mg}mg`:""}</span>})}
           </div>
-          {naCount>0&&<div style={{fontSize:"10px",color:DISABLED,marginTop:"3px"}}>{naCount} dimensão{naCount>1?"s":""} N/A</div>}
+          {naCount>0&&<div style={{fontSize:"10px",color:TEXT2,marginTop:"3px",fontWeight:"500"}}>{naCount} dimensão{naCount>1?"s":""} N/A</div>}
           {hasN&&<button onClick={()=>setOpen(p=>!p)} style={{background:"none",border:"none",padding:"2px 0 0",fontSize:"11px",color:INFO,cursor:"pointer",fontFamily:"inherit",fontWeight:"500"}}>{open?"▲ ocultar notas":"▼ ver notas"}</button>}
         </div>
         {av&&<div style={{display:"flex",alignItems:"baseline",gap:"3px"}}>
@@ -607,7 +607,7 @@ function TratamentoTab({meds,setMeds,onMedChange,onMedDelete}){
                 <span style={{fontSize:"10px",fontWeight:"600",padding:"2px 8px",borderRadius:"20px",background:ativo?`${SUCCESS}15`:`${TEXT2}15`,color:ativo?SUCCESS:TEXT2}}>{ativo?"Ativo":"Encerrado"}</span>
               </div>
               {med.principioAtivo&&<div style={{fontSize:"12px",color:TEXT2,marginTop:"2px"}}>{med.principioAtivo}</div>}
-              {med.prescritor&&<div style={{fontSize:"11px",color:DISABLED,marginTop:"1px"}}>Dr(a). {med.prescritor}</div>}
+              {med.prescritor&&<div style={{fontSize:"11px",color:TEXT2,marginTop:"1px"}}>Dr(a). {med.prescritor}</div>}
             </div>
             <button onClick={()=>delMed(med.id)} style={{background:`${DANGER}10`,border:`1px solid ${DANGER}30`,borderRadius:"6px",padding:"4px 10px",fontSize:"11px",color:DANGER,marginLeft:"8px",fontFamily:"inherit",fontWeight:"600"}}>✕</button>
           </div>
@@ -697,7 +697,7 @@ function App(){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{fontSize:"11px",letterSpacing:".2em",textTransform:"uppercase",color:PRIMARY,marginBottom:"2px",fontWeight:"700"}}>Clarity</div>
-            <div style={{fontSize:"21px",fontWeight:"800",color:TEXT,letterSpacing:"-.02em"}}>Seu dia, sua evolução</div>
+            <div style={{fontSize:"21px",fontWeight:"800",color:TEXT,letterSpacing:"-.02em"}}>Meu dia, minha evolução</div>
           </div>
           <div style={{marginTop:"4px"}}><SyncBadge status={syncStatus}/></div>
         </div>
@@ -843,7 +843,7 @@ function App(){
                   <div style={{display:"flex",gap:"4px",alignItems:"flex-end",height:"52px"}}>
                     {last7.map(date=>{const e=entries[date];const av=avgEntry(e);const h=av?Math.max(8,(av/5)*52):4;const isDose=allDoseMarkers.includes(date);
                       return<div key={date} style={{flex:1,display:"flex",flexDirection:"column",alignItems:"center",gap:"4px"}}>
-                        <div style={{width:"100%",height:`${h}px`,borderRadius:"4px 4px 2px 2px",background:av?C[Math.round(av)]:BORDER,outline:isDose?`2px solid ${WARNING}`:""}}/>
+                        <div style={{width:"100%",height:`${h}px`,borderRadius:"4px 4px 2px 2px",background:av?C[Math.round(av)]:BORDER}}/>
                         <div style={{fontSize:"9px",color:isDose?WARNING:TEXT2,fontWeight:isDose?"700":"400"}}>{fmtS(date)}</div>
                       </div>;
                     })}
