@@ -322,7 +322,7 @@ function PinScreen({onUnlock}){
       <div className="fa" style={{textAlign:"center",marginBottom:"44px"}}>
         <img src="icon-192.png" alt="icon" style={{width:"72px",height:"72px",borderRadius:"16px",marginBottom:"16px",boxShadow:"0 4px 16px rgba(9,47,89,0.15)"}}/>
         <div style={{fontSize:"26px",fontWeight:"800",color:PRIMARY,letterSpacing:"-.02em"}}>Clarity</div>
-        <div style={{fontSize:"13px",color:TEXT2,marginTop:"4px"}}>Meu dia, minha evolução</div>
+        <div style={{fontSize:"13px",color:TEXT2,marginTop:"4px"}}>Meu dia, minha evolução!</div>
         <div style={{fontSize:"12px",color:DISABLED,marginTop:"10px"}}>{lbl}</div>
       </div>
       <div className={err?"shake":""} style={{display:"flex",gap:"14px",marginBottom:"40px"}}>
@@ -814,7 +814,7 @@ function App(){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{fontSize:"11px",letterSpacing:".2em",textTransform:"uppercase",color:PRIMARY,marginBottom:"2px",fontWeight:"700"}}>Clarity</div>
-            <div style={{fontSize:"21px",fontWeight:"800",color:TEXT,letterSpacing:"-.02em"}}>Meu dia, minha evolução</div>
+            <div style={{fontSize:"21px",fontWeight:"800",color:TEXT,letterSpacing:"-.02em"}}>Meu dia, minha evolução!</div>
           </div>
           <div style={{marginTop:"4px"}}><SyncBadge status={syncStatus}/></div>
         </div>
@@ -977,20 +977,29 @@ function App(){
                     })}
                   </div>
                 </div>
-                {DIMS.map(dim=>{const av=dimAvg(dim.id);const data=last7.map(d=>entries[d]?.[dim.id]).filter(v=>v>0);const an=Math.round(parseFloat(av));
-                  return<div key={dim.id} className="fa" style={card}>
-                    <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:data.length>=2?"10px":"0"}}>
-                      <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
-                        <span style={{fontSize:"18px"}}>{dim.icon}</span>
-                        <div>
-                          <div style={{fontSize:"13px",fontWeight:"600",color:TEXT}}>{dim.label}</div>
-                          <div style={{fontSize:"10px",color:av?C[an]:TEXT2,fontWeight:"600",marginTop:"2px"}}>Média {av||"--"} · {last7.length} dias</div>
+                {DIMS.map(dim=>{
+                  const av=dimAvg(dim.id);
+                  // Filtra datas e valores juntos para manter alinhamento
+                  const validPoints=last7.filter(d=>entries[d]?.[dim.id]>0);
+                  const data=validPoints.map(d=>entries[d][dim.id]);
+                  const an=Math.round(parseFloat(av));
+                  return(
+                    <div key={dim.id} className="fa" style={card}>
+                      <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:data.length>=2?"10px":"0"}}>
+                        <div style={{display:"flex",alignItems:"center",gap:"9px"}}>
+                          <span style={{fontSize:"18px"}}>{dim.icon}</span>
+                          <div>
+                            <div style={{fontSize:"13px",fontWeight:"600",color:TEXT}}>{dim.label}</div>
+                            <div style={{fontSize:"10px",color:av?C[an]:TEXT2,fontWeight:"600",marginTop:"2px"}}>Média {av||"--"} · {last7.length} dias</div>
+                          </div>
                         </div>
+                        <span style={{fontSize:"22px",fontWeight:"800",color:av?C[an]:DISABLED}}>{av||"--"}</span>
                       </div>
-                      <span style={{fontSize:"22px",fontWeight:"800",color:av?C[an]:DISABLED}}>{av||"--"}</span>
+                      {data.length>=2&&<TrendLine data={data} color={C[an]||PRIMARY}
+                        markers={markersInLast7.filter(d=>validPoints.includes(d))}
+                        dates={validPoints}/>}
                     </div>
-                    {data.length>=2&&<TrendLine data={data} color={C[an]||PRIMARY} markers={markersInLast7} dates={last7}/>}
-                  </div>;
+                  );
                 })}
               </>
             )}
