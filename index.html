@@ -88,8 +88,8 @@ const SUPA_URL="https://kyblsjyzlvawxinzaakf.supabase.co";
 const SUPA_KEY="eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imt5Ymxzanl6bHZhd3hpbnphYWtmIiwicm9sZSI6ImFub24iLCJpYXQiOjE3NzUwMjQ4MTksImV4cCI6MjA5MDYwMDgxOX0.h12Sjfqqix3orJjj-p-_ywl9uefHIhEt-0GmKRsncpg";
 const SH={"apikey":SUPA_KEY,"Authorization":`Bearer ${SUPA_KEY}`,"Content-Type":"application/json","Prefer":"resolution=merge-duplicates,return=minimal"};
 const SG={"apikey":SUPA_KEY,"Authorization":`Bearer ${SUPA_KEY}`};
-function e2r(date,e){return{data:date,foco:e.foco||null,sono:e.sono||null,humor:e.humor||null,emocao:e.emocao||null,alcool:e.alcool||null,movimento:e.movimento||null,financas:e.financas||null,ansiedade:e.ansiedade||null,procrast:e.procrast||null,produtiv:e.produtiv||null,nota_foco:e.n_foco||null,nota_sono:e.n_sono||null,nota_humor:e.n_humor||null,nota_emocao:e.n_emocao||null,nota_alcool:e.n_alcool||null,nota_movimento:e.n_movimento||null,nota_financas:e.n_financas||null,nota_ansiedade:e.n_ansiedade||null,nota_procrast:e.n_procrast||null,nota_produtiv:e.n_produtiv||null}}
-function r2e(r){return{foco:r.foco,sono:r.sono,humor:r.humor,emocao:r.emocao,alcool:r.alcool,movimento:r.movimento,financas:r.financas,ansiedade:r.ansiedade,procrast:r.procrast,produtiv:r.produtiv,n_foco:r.nota_foco,n_sono:r.nota_sono,n_humor:r.nota_humor,n_emocao:r.nota_emocao,n_alcool:r.nota_alcool,n_movimento:r.nota_movimento,n_financas:r.nota_financas,n_ansiedade:r.nota_ansiedade,n_procrast:r.nota_procrast,n_produtiv:r.nota_produtiv}}
+function e2r(date,e){return{data:date,foco:e.foco||null,sono:e.sono||null,humor:e.humor||null,emocao:e.emocao||null,alcool:e.alcool||null,movimento:e.movimento||null,financas:e.financas||null,ansiedade:e.ansiedade||null,procrast:e.procrast||null,produtiv:e.produtiv||null,nota_foco:e.n_foco||null,nota_sono:e.n_sono||null,nota_humor:e.n_humor||null,nota_emocao:e.n_emocao||null,nota_alcool:e.n_alcool||null,nota_movimento:e.n_movimento||null,nota_financas:e.n_financas||null,nota_ansiedade:e.n_ansiedade||null,nota_procrast:e.n_procrast||null,nota_produtiv:e.n_produtiv||null,reacao_med:e.reacao_med||null}}
+function r2e(r){return{foco:r.foco,sono:r.sono,humor:r.humor,emocao:r.emocao,alcool:r.alcool,movimento:r.movimento,financas:r.financas,ansiedade:r.ansiedade,procrast:r.procrast,produtiv:r.produtiv,n_foco:r.nota_foco,n_sono:r.nota_sono,n_humor:r.nota_humor,n_emocao:r.nota_emocao,n_alcool:r.nota_alcool,n_movimento:r.nota_movimento,n_financas:r.nota_financas,n_ansiedade:r.nota_ansiedade,n_procrast:r.nota_procrast,n_produtiv:r.nota_produtiv,reacao_med:r.reacao_med||null}}
 async function sbGE(){const r=await fetch(`${SUPA_URL}/rest/v1/dvida_registros?select=*`,{headers:SG});if(!r.ok)throw new Error();const rows=await r.json();const o={};rows.forEach(row=>{o[row.data]=r2e(row)});return o}
 async function sbUE(date,e){await fetch(`${SUPA_URL}/rest/v1/dvida_registros`,{method:"POST",headers:SH,body:JSON.stringify(e2r(date,e))})}
 async function sbGM(){const r=await fetch(`${SUPA_URL}/rest/v1/dvida_medicamentos?select=*`,{headers:SG});if(!r.ok)throw new Error();return(await r.json()).map(r=>r.dados)}
@@ -155,6 +155,62 @@ const DIMS=[
   {id:"procrast",  icon:"⏳",label:"Procrastinação",               desc:["Evitei tudo","Muita resistência","Regular","Pouca resistência","Executei tudo"], a1:"Evitei tudo que precisava fazer",        a5:"Executei tarefas sem resistência"},
   {id:"produtiv",  icon:"💼",label:"Produtividade no Trabalho",    desc:["Improdutivo","Pouco produtivo","Regular","Produtivo","Alta entrega"],a1:"Dia improdutivo, nada entregue",                         a5:"Dia de alta entrega, metas atingidas"},
 ];
+
+// ── Card de Tolerância à Medicação ───────────────────────────────────────
+function MedReacaoCard({med,reacao,onChange}){
+  const[open,setOpen]=useState(false);
+  const tolerancia=reacao?.tolerancia??null;
+  const obs=reacao?.obs||"";
+
+  const TOLS=["Efeitos intensos","Efeitos moderados","Tolerável","Bem tolerado","Sem efeitos"];
+
+  return(
+    <div style={{...card,border:`1px solid ${tolerancia!==null&&tolerancia<=2?DANGER+"50":BORDER}`}}>
+      <button onClick={()=>setOpen(p=>!p)} style={{width:"100%",background:"none",border:"none",padding:0,
+        display:"flex",alignItems:"center",justifyContent:"space-between",cursor:"pointer",fontFamily:"inherit"}}>
+        <div style={{display:"flex",alignItems:"center",gap:"8px"}}>
+          <span style={{fontSize:"18px"}}>💊</span>
+          <div style={{textAlign:"left"}}>
+            <div style={{fontSize:"14px",fontWeight:"600",color:TEXT}}>{med.nome}</div>
+            <div style={{fontSize:"11px",color:TEXT2,marginTop:"1px"}}>
+              {tolerancia!==null
+                ?<span style={{color:C[tolerancia],fontWeight:"600"}}>Tolerância: {TOLS[tolerancia-1]}</span>
+                :"Tolerância não registrada hoje"}
+            </div>
+          </div>
+        </div>
+        <div style={{display:"flex",alignItems:"center",gap:"6px"}}>
+          {tolerancia!==null&&<span style={{fontSize:"16px",fontWeight:"800",color:C[tolerancia]}}>{tolerancia}</span>}
+          <span style={{color:TEXT2,fontSize:"16px",display:"inline-block",
+            transform:open?"rotate(180deg)":"rotate(0deg)",transition:"transform 200ms ease-in-out"}}>⌄</span>
+        </div>
+      </button>
+
+      {open&&(
+        <div style={{marginTop:"14px",paddingTop:"14px",borderTop:`1px solid ${BORDER}`}}>
+          <div style={{fontSize:"11px",color:TEXT2,fontWeight:"600",textTransform:"uppercase",
+            letterSpacing:".08em",marginBottom:"10px"}}>
+            Tolerância / Efeitos colaterais
+          </div>
+          <LikertScale value={tolerancia} onChange={v=>onChange({tolerancia:v,obs})}/>
+          {tolerancia>0&&<div style={{textAlign:"center",fontSize:"11px",color:C[tolerancia],
+            fontWeight:"700",letterSpacing:".04em",textTransform:"uppercase",marginTop:"8px"}}>
+            {TOLS[tolerancia-1]}
+          </div>}
+          <div style={{display:"flex",justifyContent:"space-between",marginTop:"10px",gap:"8px"}}>
+            <div style={{fontSize:"10px",color:TEXT2,maxWidth:"46%",lineHeight:1.5,opacity:.8}}>① Efeitos intensos e incômodos</div>
+            <div style={{fontSize:"10px",color:TEXT2,maxWidth:"46%",lineHeight:1.5,textAlign:"right",opacity:.8}}>⑤ Nenhum efeito colateral</div>
+          </div>
+          <textarea rows={2} placeholder="Observação sobre a medicação hoje..."
+            value={obs} onChange={e=>onChange({tolerancia,obs:e.target.value})}
+            style={{marginTop:"12px",width:"100%",background:BG,border:`1px solid ${BORDER}`,
+              borderRadius:"4px",padding:"10px 12px",color:TEXT,fontSize:"13px",
+              outline:"none",lineHeight:"1.6",fontFamily:"inherit"}}/>
+        </div>
+      )}
+    </div>
+  );
+}
 
 // ── Likert Scale com N/A ──────────────────────────────────────────────────
 function LikertScale({value,onChange}){
@@ -355,6 +411,26 @@ function HistoryItem({date,entry,meds,allDoseMarkers}){
       </div>
       {open&&(
         <div style={{marginTop:"12px",paddingTop:"12px",borderTop:`1px solid ${BORDER}`,display:"flex",flexDirection:"column",gap:"10px"}}>
+          {/* Reação à medicação */}
+          {entry.reacao_med&&Object.keys(entry.reacao_med).length>0&&(
+            <div>
+              <div style={{fontSize:"11px",color:TEXT2,fontWeight:"600",marginBottom:"6px"}}>💊 Tolerância à medicação</div>
+              {Object.entries(entry.reacao_med).map(([medId,r])=>{
+                const med=meds.find(m=>m.id===medId);
+                const tols=["Efeitos intensos","Efeitos moderados","Tolerável","Bem tolerado","Sem efeitos"];
+                if(!r||r.tolerancia===null)return null;
+                return(
+                  <div key={medId} style={{marginBottom:"8px"}}>
+                    {med&&<div style={{fontSize:"11px",color:PRIMARY,fontWeight:"600",marginBottom:"4px"}}>{med.nome}</div>}
+                    {r.tolerancia>0&&<span style={{fontSize:"11px",padding:"2px 10px",borderRadius:"20px",background:`${C[r.tolerancia]}15`,color:C[r.tolerancia],fontWeight:"600",border:`1px solid ${C[r.tolerancia]}40`}}>
+                      {r.tolerancia} — {tols[r.tolerancia-1]}
+                    </span>}
+                    {r.obs&&<div style={{fontSize:"12px",color:TEXT,lineHeight:1.5,marginTop:"4px",opacity:.85}}>{r.obs}</div>}
+                  </div>
+                );
+              })}
+            </div>
+          )}
           {DIMS.filter(d=>entry[`n_${d.id}`]).map(dim=>(
             <div key={dim.id}>
               <div style={{fontSize:"11px",color:TEXT2,marginBottom:"3px",fontWeight:"500"}}>{dim.icon} {dim.label}</div>
@@ -763,7 +839,18 @@ function App(){
               <span style={{fontSize:"11px",color:TEXT2,lineHeight:1.5}}>Use <strong style={{color:TEXT}}>N/A</strong> para dimensões que não se aplicam hoje — ex: trabalho no fim de semana. N/A não entra na média.</span>
             </div>
 
-            {/* Dimensões */}
+            {/* Cards de reação à medicação */}
+            {medsHoje.length>0&&<>
+              <div style={{fontSize:"11px",color:TEXT2,fontWeight:"600",textTransform:"uppercase",letterSpacing:".08em"}}>Reação à medicação</div>
+              {medsHoje.map(med=>(
+                <MedReacaoCard key={med.id} med={med}
+                  reacao={draft.reacao_med?.[med.id]||null}
+                  onChange={r=>setDraft(p=>({...p,reacao_med:{...(p.reacao_med||{}),[med.id]:r}}))}/>
+              ))}
+              <div style={{height:"4px"}}/>
+            </>}
+
+            {/* Cards de dimensão */}
             {DIMS.map(dim=>(
               <div key={dim.id} className="fa" style={{...card,
                 borderColor:draft[dim.id]===0?DISABLED:draft[dim.id]>0?`${C[draft[dim.id]]}60`:BORDER,
