@@ -813,7 +813,10 @@ function App(){
       <div style={{padding:"52px 20px 16px",background:CARD,borderBottom:`1px solid ${BORDER}`,boxShadow:"0 2px 8px rgba(0,0,0,0.04)"}}>
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
-            <div style={{fontSize:"11px",letterSpacing:".2em",textTransform:"uppercase",color:PRIMARY,marginBottom:"2px",fontWeight:"700"}}>Clarity</div>
+            <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"2px"}}>
+              <img src="icon-192.png" alt="Clarity" style={{width:"28px",height:"28px",borderRadius:"6px",boxShadow:"0 2px 6px rgba(9,47,89,0.15)"}}/>
+              <div style={{fontSize:"11px",letterSpacing:".2em",textTransform:"uppercase",color:PRIMARY,fontWeight:"700"}}>Clarity</div>
+            </div>
             <div style={{fontSize:"21px",fontWeight:"800",color:TEXT,letterSpacing:"-.02em"}}>Meu dia, minha evolução!</div>
           </div>
           <div style={{marginTop:"4px"}}><SyncBadge status={syncStatus}/></div>
