@@ -7,7 +7,7 @@
 <meta name="apple-mobile-web-app-capable" content="yes"/>
 <meta name="apple-mobile-web-app-status-bar-style" content="default"/>
 <meta name="apple-mobile-web-app-title" content="Clarity"/>
-<meta name="description" content="Meu dia, minha evolução"/>
+<meta name="description" content="Meu dia, minha evolução!"/>
 <meta name="mobile-web-app-capable" content="yes"/>
 <link rel="apple-touch-icon" sizes="192x192" href="icon-192.png"/>
 <link rel="apple-touch-icon" sizes="512x512" href="icon-512.png"/>
@@ -662,7 +662,7 @@ function CorrelacaoTab({entries,meds}){
 }
 
 // ── Tratamento ─────────────────────────────────────────────────────────────
-function TratamentoTab({meds,setMeds,onMedChange,onMedDelete}){
+function TratamentoTab({meds,setMeds,entries,onMedChange,onMedDelete}){
   const[showAdd,setShowAdd]=useState(false);const[doseModal,setDoseModal]=useState(null);
   const blank={nome:"",principioAtivo:"",prescritor:"",dataInicio:today(),precoEmb:"",capsulasEmb:"30",mgInicial:""};
   const[form,setForm]=useState(blank);const[doseForm,setDoseForm]=useState({data:today(),mg:""});const f=k=>e=>setForm(p=>({...p,[k]:e.target.value}));
@@ -998,7 +998,7 @@ function App(){
         )}
 
         {view==="corr"&&<CorrelacaoTab entries={entries} meds={meds}/>}
-        {view==="trat"&&<TratamentoTab meds={meds} setMeds={setMeds} onMedChange={handleMedChange} onMedDelete={handleMedDelete}/>}
+        {view==="trat"&&<TratamentoTab meds={meds} setMeds={setMeds} entries={entries} onMedChange={handleMedChange} onMedDelete={handleMedDelete}/>}
       </div>
     </div>
     <InstallBanner/>
