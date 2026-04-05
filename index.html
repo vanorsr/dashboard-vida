@@ -293,7 +293,7 @@ function InstallBanner(){
       <div style={{background:CARD,borderTop:`1px solid ${BORDER}`,borderRadius:"16px 16px 0 0",
         padding:"20px",margin:"0 auto",maxWidth:"430px",boxShadow:"0 -8px 32px rgba(0,0,0,0.12)"}}>
         <div style={{display:"flex",alignItems:"center",gap:"14px",marginBottom:"16px"}}>
-          <img src="icon-192.png" alt="icon" style={{width:"52px",height:"52px",borderRadius:"8px",flexShrink:0}}/>
+          <div style={{width:"52px",height:"52px",borderRadius:"12px",background:PRIMARY,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"28px",flexShrink:0,boxShadow:"0 2px 8px rgba(9,47,89,0.2)"}}>🧠</div>
           <div>
             <div style={{fontSize:"15px",fontWeight:"700",color:TEXT}}>Clarity</div>
             <div style={{fontSize:"12px",color:TEXT2,marginTop:"2px"}}>Instale na tela inicial para acesso rápido e uso offline</div>
@@ -320,7 +320,7 @@ function PinScreen({onUnlock}){
   return(
     <div style={{minHeight:"100vh",display:"flex",flexDirection:"column",alignItems:"center",justifyContent:"center",padding:"40px 20px",background:BG}}>
       <div className="fa" style={{textAlign:"center",marginBottom:"44px"}}>
-        <img src="icon-192.png" alt="icon" style={{width:"72px",height:"72px",borderRadius:"16px",marginBottom:"16px",boxShadow:"0 4px 16px rgba(9,47,89,0.15)"}}/>
+        <div style={{width:"72px",height:"72px",borderRadius:"18px",background:PRIMARY,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"40px",marginBottom:"16px",boxShadow:"0 4px 16px rgba(9,47,89,0.25)",margin:"0 auto 16px"}}>🧠</div>
         <div style={{fontSize:"26px",fontWeight:"800",color:PRIMARY,letterSpacing:"-.02em"}}>Clarity</div>
         <div style={{fontSize:"13px",color:TEXT2,marginTop:"4px"}}>Meu dia, minha evolução!</div>
         <div style={{fontSize:"12px",color:DISABLED,marginTop:"10px"}}>{lbl}</div>
@@ -814,7 +814,7 @@ function App(){
         <div style={{display:"flex",justifyContent:"space-between",alignItems:"flex-start"}}>
           <div>
             <div style={{display:"flex",alignItems:"center",gap:"8px",marginBottom:"2px"}}>
-              <img src="icon-192.png" alt="Clarity" style={{width:"28px",height:"28px",borderRadius:"6px",boxShadow:"0 2px 6px rgba(9,47,89,0.15)"}}/>
+              <div style={{width:"28px",height:"28px",borderRadius:"6px",background:`${PRIMARY}`,display:"flex",alignItems:"center",justifyContent:"center",fontSize:"16px",boxShadow:"0 2px 6px rgba(9,47,89,0.2)",flexShrink:0}}>🧠</div>
               <div style={{fontSize:"11px",letterSpacing:".2em",textTransform:"uppercase",color:PRIMARY,fontWeight:"700"}}>Clarity</div>
             </div>
             <div style={{fontSize:"21px",fontWeight:"800",color:TEXT,letterSpacing:"-.02em"}}>Meu dia, minha evolução!</div>
