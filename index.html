@@ -709,6 +709,44 @@ function TratamentoTab({meds,setMeds,onMedChange,onMedDelete}){
             <button onClick={()=>setDoseModal(med.id)} style={{flex:1,padding:"9px",borderRadius:"6px",background:`${PRIMARY}10`,border:`1px solid ${PRIMARY}30`,color:PRIMARY,fontSize:"12px",fontWeight:"600",fontFamily:"inherit"}}>+ Ajuste de dose</button>
             <button onClick={()=>toggleFim(med.id)} style={{flex:1,padding:"9px",borderRadius:"6px",background:BG,border:`1px solid ${BORDER}`,color:TEXT2,fontSize:"12px",fontFamily:"inherit"}}>{ativo?"Encerrar":"Reativar"}</button>
           </div>
+
+          {/* Gráfico de tolerância */}
+          {(()=>{
+            const tolDates=Object.keys(entries).sort().filter(d=>entries[d]?.reacao_med?.[med.id]?.tolerancia>0);
+            if(tolDates.length<2)return null;
+            const W=280,H=80,PL=20,PR=12,PT=8,PB=20;const cW=W-PL-PR,cH=H-PT-PB;
+            const vals=tolDates.map(d=>entries[d].reacao_med[med.id].tolerancia);
+            const xs=tolDates.map((_,i)=>PL+(i/(tolDates.length-1))*cW);
+            const ys=vals.map(v=>PT+cH-((v-1)/4)*cH);
+            const path=xs.map((x,i)=>`${i?"L":"M"}${x},${ys[i]}`).join(" ");
+            const doseChangeDates=[...med.doses].sort((a,b)=>a.data>b.data?1:-1).filter(d=>tolDates.includes(d.data));
+            const avg=+(vals.reduce((a,b)=>a+b,0)/vals.length).toFixed(1);
+            return(
+              <div style={{marginTop:"14px",paddingTop:"14px",borderTop:`1px solid ${BORDER}`}}>
+                <div style={{display:"flex",justifyContent:"space-between",alignItems:"center",marginBottom:"10px"}}>
+                  <div style={{fontSize:"11px",color:TEXT2,fontWeight:"600",textTransform:"uppercase",letterSpacing:".08em"}}>Tolerância ao longo do tempo</div>
+                  <div style={{display:"flex",alignItems:"baseline",gap:"3px"}}>
+                    <span style={{fontSize:"16px",fontWeight:"800",color:C[Math.round(avg)]}}>{avg}</span>
+                    <span style={{fontSize:"10px",color:TEXT2}}>/5 média</span>
+                  </div>
+                </div>
+                <svg width={W} height={H} style={{display:"block",overflow:"visible"}}>
+                  {[1,2,3,4,5].map(v=><line key={v} x1={PL} y1={PT+cH-((v-1)/4)*cH} x2={W-PR} y2={PT+cH-((v-1)/4)*cH} stroke={BORDER} strokeWidth="1"/>)}
+                  {doseChangeDates.map((d,i)=>{const idx=tolDates.indexOf(d.data);if(idx<0)return null;const x=xs[idx];return<g key={i}><line x1={x} y1={PT} x2={x} y2={PT+cH} stroke={`${WARNING}80`} strokeWidth="1.5" strokeDasharray="3,3"/></g>})}
+                  <path d={path} fill="none" stroke={PRIMARY} strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" opacity=".85"/>
+                  {xs.map((x,i)=><circle key={i} cx={x} cy={ys[i]} r="3.5" fill={C[vals[i]]} stroke={CARD} strokeWidth="1.5"/>)}
+                  {[1,3,5].map(v=><text key={v} x={PL-4} y={PT+cH-((v-1)/4)*cH} textAnchor="end" fontSize="9" fill={TEXT2} dominantBaseline="middle">{v}</text>)}
+                  {tolDates.map((d,i)=>{if(tolDates.length<=5||i%(Math.ceil(tolDates.length/4))===0||i===tolDates.length-1)return<text key={i} x={xs[i]} y={H-2} textAnchor="middle" fontSize="9" fill={TEXT2}>{fmtS(d)}</text>;return null;})}
+                  <line x1={PL} y1={PT} x2={PL} y2={PT+cH} stroke={BORDER} strokeWidth="1"/>
+                  <line x1={PL} y1={PT+cH} x2={W-PR} y2={PT+cH} stroke={BORDER} strokeWidth="1"/>
+                </svg>
+                {doseChangeDates.length>0&&<div style={{display:"flex",alignItems:"center",gap:"6px",marginTop:"6px"}}>
+                  <div style={{width:"16px",height:"0",borderTop:`2px dashed ${WARNING}`,opacity:.8}}/>
+                  <span style={{fontSize:"10px",color:TEXT2}}>Ajuste de dose</span>
+                </div>}
+              </div>
+            );
+          })()}
         </div>;
       })}
       {showAdd&&<Modal title="Novo medicamento" onClose={()=>setShowAdd(false)}>
@@ -750,8 +788,11 @@ function App(){
   const isToday=selDate===today();const alreadySaved=!!entries[selDate];
   const allAnswered=DIMS.every(d=>draft[d.id]!==null&&draft[d.id]!==undefined);
   const answeredCount=DIMS.filter(d=>draft[d.id]!==null&&draft[d.id]!==undefined).length;
+  // Habilita botão se: todas dimensões respondidas (novo) OU se já salvo e qualquer campo mudou (incluindo tolerância)
+  const hasChanges=alreadySaved?JSON.stringify(draft)!==JSON.stringify(entries[selDate]):false;
+  const canSave=allAnswered||hasChanges;
 
-  const handleSave=()=>{if(!allAnswered)return;setSaving(true);const u={...entries,[selDate]:draft};persist(DATA_KEY,u);setEntries(u);setSaved(true);setSyncStatus("syncing");sbUE(selDate,draft).then(()=>{setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000)}).catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000)});setTimeout(()=>{setSaved(false);setSaving(false);setView("history")},1600)};
+  const handleSave=()=>{if(!canSave)return;setSaving(true);const u={...entries,[selDate]:draft};persist(DATA_KEY,u);setEntries(u);setSaved(true);setSyncStatus("syncing");sbUE(selDate,draft).then(()=>{setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000)}).catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000)});setTimeout(()=>{setSaved(false);setSaving(false);setView("history")},1600)};
   const handleMedChange=med=>{setSyncStatus("syncing");sbUM(med).then(()=>{setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000)}).catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000)})};
   const handleMedDelete=id=>{setSyncStatus("syncing");sbDM(id).then(()=>{setSyncStatus("synced");setTimeout(()=>setSyncStatus("idle"),3000)}).catch(()=>{setSyncStatus("error");setTimeout(()=>setSyncStatus("idle"),4000)})};
 
@@ -882,12 +923,12 @@ function App(){
               </div>
             ))}
 
-            <button onClick={handleSave} disabled={!allAnswered||saving} style={{
+            <button onClick={handleSave} disabled={!canSave||saving} style={{
               width:"100%",padding:"16px",borderRadius:"6px",border:"none",fontFamily:"inherit",
-              background:saved?SUCCESS:allAnswered?PRIMARY:DISABLED,
+              background:saved?SUCCESS:canSave?PRIMARY:DISABLED,
               color:"#fff",fontSize:"15px",fontWeight:"700",
-              cursor:allAnswered?"pointer":"default",transition:"all 200ms ease-in-out",
-              marginTop:"4px",boxShadow:allAnswered&&!saved?"0 4px 12px rgba(9,47,89,0.25)":"none",
+              cursor:canSave?"pointer":"default",transition:"all 200ms ease-in-out",
+              marginTop:"4px",boxShadow:canSave&&!saved?"0 4px 12px rgba(9,47,89,0.25)":"none",
             }}>
               {saved?"✓ Salvo!":saving?"Salvando...":alreadySaved?"Atualizar registro":"Salvar registro"}
             </button>
